@@ -1,6 +1,8 @@
 import type { AIContext } from '@limax/shared';
 import { AIStructuredResultSchema } from '@limax/shared';
 import type { IAIProviderAdapter, ProviderRequestOptions, ProviderRawResponse } from './types.js';
+import { buildSalesSystemPrompt } from '../prompts/index.js';
+import { detectLanguage } from '../index.js';
 
 export class OpenAIProviderAdapter implements IAIProviderAdapter {
   readonly providerName = 'openai' as const;
@@ -26,27 +28,8 @@ export class OpenAIProviderAdapter implements IAIProviderAdapter {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const systemPrompt = `You are LImax Yarn B2B AI Assistant.
-Respond ONLY with a valid JSON object matching this schema:
-{
-  "replyText": "Response in customer language",
-  "language": "uz" | "ru" | "en" | "zh" | "tg" | "kk" | "ky",
-  "intent": "general_inquiry" | "product_price" | "moq" | "order" | "complaint",
-  "confidence": 0.0 to 1.0,
-  "needsHandoff": boolean,
-  "handoffReason": "Optional reason string",
-  "leadSignals": {
-    "productNeed": "Optional string",
-    "quantity": "Optional string",
-    "purchaseTime": "Optional string",
-    "region": "Optional string",
-    "budget": "Optional string",
-    "authority": "Optional string"
-  },
-  "usedKnowledgeIds": []
-}
-
-Never invent or hallucinate price, MOQ, stock, or technical parameters for LImax Yarn if not explicitly present in provided context. If unknown, set needsHandoff: true.`;
+    const lang = context.preferredLanguage || detectLanguage(prompt);
+    const systemPrompt = buildSalesSystemPrompt(context, { language: lang });
 
     const messages = [
       { role: 'system', content: systemPrompt },

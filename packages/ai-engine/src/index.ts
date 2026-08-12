@@ -324,3 +324,4 @@ export { KnowledgeRetriever } from './rag/retriever.js';
 export { AIOrchestrator } from './orchestrator.js';
 export * from './behavior.schema.js';
 export * from './localization/templates.js';
+export * from './prompts/index.js';

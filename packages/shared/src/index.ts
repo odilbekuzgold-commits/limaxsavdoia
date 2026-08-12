@@ -394,6 +394,7 @@ export interface AIContext {
   preferredLanguage?: SupportedLanguage;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   availableProducts?: Product[];
+  knowledgeSnippets?: string[];
   lastResponse?: string;
 }
 

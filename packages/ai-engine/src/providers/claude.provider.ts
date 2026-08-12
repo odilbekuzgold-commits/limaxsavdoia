@@ -1,6 +1,8 @@
 import type { AIContext } from '@limax/shared';
 import { AIStructuredResultSchema } from '@limax/shared';
 import type { IAIProviderAdapter, ProviderRequestOptions, ProviderRawResponse } from './types.js';
+import { buildSalesSystemPrompt } from '../prompts/index.js';
+import { detectLanguage } from '../index.js';
 
 export class ClaudeProviderAdapter implements IAIProviderAdapter {
   readonly providerName = 'claude' as const;
@@ -26,25 +28,8 @@ export class ClaudeProviderAdapter implements IAIProviderAdapter {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const systemPrompt = `You are LImax Yarn B2B AI Assistant.
-Respond ONLY with a valid JSON object matching this schema:
-{
-  "replyText": "Response in customer language",
-  "language": "uz" | "ru" | "en" | "zh" | "tg" | "kk" | "ky",
-  "intent": "general_inquiry" | "product_price" | "moq" | "order" | "complaint",
-  "confidence": 0.0 to 1.0,
-  "needsHandoff": boolean,
-  "handoffReason": "Optional reason string",
-  "leadSignals": {
-    "productNeed": "Optional string",
-    "quantity": "Optional string",
-    "purchaseTime": "Optional string",
-    "region": "Optional string",
-    "budget": "Optional string",
-    "authority": "Optional string"
-  },
-  "usedKnowledgeIds": []
-}`;
+    const lang = context.preferredLanguage || detectLanguage(prompt);
+    const systemPrompt = buildSalesSystemPrompt(context, { language: lang });
 
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
