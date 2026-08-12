@@ -176,6 +176,8 @@ export const HandoffSchema = z.object({
   customerId: z.string().uuid(),
   reason: z.string().min(1),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+  status: z.enum(['PENDING', 'ACCEPTED', 'RESOLVED', 'REJECTED']).default('PENDING').optional(),
+  notes: z.string().optional(),
   assignedManagerId: z.string().uuid().optional(),
   assignedAt: z.date().optional(),
   acceptedAt: z.date().optional(),
@@ -386,6 +388,7 @@ export const KnowledgeItemSchema = z.object({
 export type KnowledgeItem = z.infer<typeof KnowledgeItemSchema>;
 
 export interface AIContext {
+  conversationId?: string;
   customerId?: string;
   customerName?: string;
   preferredLanguage?: SupportedLanguage;

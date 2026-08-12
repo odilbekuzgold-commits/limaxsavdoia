@@ -63,6 +63,8 @@ export class PgHandoffRepository implements IHandoffRepository {
       customerId: row.customer_id as string,
       reason: row.reason as string,
       priority: row.priority as Handoff['priority'],
+      status: (row.status as Handoff['status']) || 'PENDING',
+      notes: row.notes as string | undefined,
       assignedManagerId: row.assigned_manager_id as string | undefined,
       assignedAt: row.assigned_at ? new Date(row.assigned_at as string) : undefined,
       acceptedAt: row.accepted_at ? new Date(row.accepted_at as string) : undefined,

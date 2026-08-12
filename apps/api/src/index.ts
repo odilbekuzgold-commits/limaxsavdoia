@@ -109,6 +109,16 @@ import {
   TelegramPollingRunner,
 } from './modules/telegram/index.js';
 
+import { loadBehaviorV2Config } from '@limax/ai-engine';
+
+try {
+  loadBehaviorV2Config();
+  logger.info('[API] Behavior V2 configuration loaded successfully');
+} catch (err: any) {
+  logger.fatal({ err: err.message }, '[API FATAL] Behavior V2 configuration missing or invalid. Aborting startup.');
+  process.exit(1);
+}
+
 const driver = env.REPOSITORY_DRIVER as RepositoryDriver;
 
 // Production safety: memory driver is not allowed in production

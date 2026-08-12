@@ -14,7 +14,7 @@ export class InMemoryHandoffRepository implements IHandoffRepository {
 
   async create(data: Omit<Handoff, 'id' | 'createdAt' | 'updatedAt'>): Promise<Handoff> {
     const now = new Date();
-    const handoff: Handoff = { ...data, id: randomUUID(), createdAt: now, updatedAt: now };
+    const handoff: Handoff = { ...data, status: data.status || 'PENDING', id: randomUUID(), createdAt: now, updatedAt: now };
     this.db.set(handoff.id, handoff);
     return handoff;
   }

@@ -20,7 +20,17 @@ async function processJob(job: QueueJob): Promise<void> {
   }
 }
 
+import { loadBehaviorV2Config } from '@limax/ai-engine';
+
 async function run(): Promise<void> {
+  try {
+    loadBehaviorV2Config();
+    logger.info('[Worker] Behavior V2 configuration loaded successfully');
+  } catch (err: any) {
+    logger.fatal({ err: err.message }, '[Worker FATAL] Behavior V2 configuration missing or invalid. Aborting startup.');
+    process.exit(1);
+  }
+
   consumer = await createBlockingConsumer();
   logger.info(`[Worker] Redis queue consumer started (${env.NODE_ENV})`);
   let failures = 0;

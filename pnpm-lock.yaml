@@ -115,6 +115,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@limax/ai-engine':
+        specifier: workspace:*
+        version: link:../../packages/ai-engine
       '@limax/config':
         specifier: workspace:*
         version: link:../../packages/config

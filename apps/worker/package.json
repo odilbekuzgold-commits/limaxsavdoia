@@ -10,6 +10,7 @@
     "lint": "eslint src"
   },
   "dependencies": {
+    "@limax/ai-engine": "workspace:*",
     "@limax/config": "workspace:*",
     "@limax/database": "workspace:*",
     "@limax/logger": "workspace:*",
