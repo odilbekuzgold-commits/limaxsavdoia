@@ -111,6 +111,7 @@ export async function processWhatsAppUpdate(
   // AI Orchestration
   const convMessages = await repos.messages.findByConversationId(conv.id);
   const aiContext = {
+    conversationId: conv.id,
     customerId,
     customerName,
     preferredLanguage: detectedLang,
@@ -122,14 +123,9 @@ export async function processWhatsAppUpdate(
 
   const orchestratorResult = await orchestrator.processQuery(normalized.text, aiContext, { repos });
 
-  if (orchestratorResult.needsHandoff) {
-    await repos.conversations.update(conv.id, { status: 'WAITING_MANAGER' });
-    await repos.handoffs.create({
-      conversationId: conv.id,
-      customerId,
-      reason: orchestratorResult.handoffReason || 'WHATSAPP_AI_HANDOFF',
-      priority: 'high',
-    });
+  if (orchestratorResult.suppressAutoReply) {
+    await repos.conversations.update(conv.id, { lastMessageAt: new Date() });
+    return { status: 'PROCESSED', messageId: normalized.messageId, reason: 'SUPPRESSED_FOR_HANDOFF' };
   }
 
   const replyText = orchestratorResult.replyText;

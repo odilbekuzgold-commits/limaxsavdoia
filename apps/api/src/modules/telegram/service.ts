@@ -168,6 +168,7 @@ export async function processTelegramUpdate(
   // 10. AI Response & Guardrail Processing via AIOrchestrator
   const convMessages = await repos.messages.findByConversationId(conv.id);
   const aiContext = {
+    conversationId: conv.id,
     customerId,
     customerName,
     preferredLanguage: detectedLang,
@@ -179,17 +180,8 @@ export async function processTelegramUpdate(
 
   const orchestratorResult = await orchestrator.processQuery(normalized.text, aiContext, { repos });
 
-  // Check Handoff Triggers
-  if (orchestratorResult.needsHandoff) {
-    await repos.conversations.update(conv.id, { status: 'WAITING_MANAGER' });
-    await repos.handoffs.create({
-      conversationId: conv.id,
-      customerId,
-      reason: orchestratorResult.handoffReason || 'AI_HANDOFF_TRIGGERED',
-      priority: 'high',
-    });
-
-    // Notify Manager Chat if configured
+  // 11. Handoff Auto-Reply Suppression Check
+  if (orchestratorResult.suppressAutoReply) {
     if (client && managerChatId) {
       try {
         await sendTelegramTextMessage(client, {
@@ -200,6 +192,14 @@ export async function processTelegramUpdate(
         // Non-critical manager notification failure
       }
     }
+    await repos.conversations.update(conv.id, { lastMessageAt: new Date() });
+    await repos.telegramReceipts.create({ updateId, updateType: 'handoff_suppressed', status: 'PROCESSED' });
+    return {
+      status: 'PROCESSED',
+      updateId,
+      updateType: 'message',
+      reason: 'SUPPRESSED_FOR_HANDOFF',
+    };
   }
 
   // 11. Send Outgoing Reply via Telegram Client (if client available)

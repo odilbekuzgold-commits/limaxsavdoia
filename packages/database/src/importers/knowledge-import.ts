@@ -1,5 +1,4 @@
 import fs from 'fs';
-import path from 'path';
 import { z } from 'zod';
 import type pg from 'pg';
 import type { IKnowledgeRepository, CreateKnowledgeItem } from '@limax/shared';
@@ -79,7 +78,7 @@ export async function importKnowledgePackV2(
     try {
       await client.query('BEGIN');
 
-      const { rows: existingRows } = await client.query<{ source: string }>('SELECT source FROM knowledge_base WHERE source IS NOT NULL');
+      const { rows: existingRows } = await client.query<{ source: string }>('SELECT source FROM knowledge_items WHERE source IS NOT NULL');
       const existingSources = new Set(existingRows.map((r) => r.source));
 
       for (const item of validatedItems) {
@@ -90,8 +89,8 @@ export async function importKnowledgePackV2(
 
         const now = new Date();
         await client.query(
-          `INSERT INTO knowledge_base (id, title, content, category, tags, language, source, status, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, $2, 'textile', ARRAY[]::text[], $3, $4, 'DRAFT', $5, $5)`,
+          `INSERT INTO knowledge_items (title, content, language, source, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, 'DRAFT', $5, $5)`,
           [item.title, item.content, item.language, item.source, now]
         );
         existingSources.add(item.source);
@@ -101,7 +100,8 @@ export async function importKnowledgePackV2(
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
-      failed = validatedItems.length - skipped - created;
+      created = 0;
+      failed = validatedItems.length - skipped;
       throw new Error(`[KNOWLEDGE IMPORTER TRANSACTION ERROR] ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       client.release();

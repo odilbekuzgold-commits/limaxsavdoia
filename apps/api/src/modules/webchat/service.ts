@@ -14,6 +14,7 @@ export interface ProcessWebChatMessageResult {
   status: 'PROCESSED' | 'HANDOFF';
   replyText: string;
   conversationId: string;
+  suppressed?: boolean;
 }
 
 export async function processWebChatMessage(
@@ -70,6 +71,7 @@ export async function processWebChatMessage(
 
   const convMessages = await repos.messages.findByConversationId(conv.id);
   const aiContext = {
+    conversationId: conv.id,
     customerId,
     customerName: senderName,
     preferredLanguage: detectedLang,
@@ -81,14 +83,14 @@ export async function processWebChatMessage(
 
   const orchestratorResult = await orchestrator.processQuery(text, aiContext, { repos });
 
-  if (orchestratorResult.needsHandoff) {
-    await repos.conversations.update(conv.id, { status: 'WAITING_MANAGER' });
-    await repos.handoffs.create({
+  if (orchestratorResult.suppressAutoReply) {
+    await repos.conversations.update(conv.id, { lastMessageAt: new Date() });
+    return {
+      status: 'HANDOFF',
+      replyText: orchestratorResult.replyText,
       conversationId: conv.id,
-      customerId,
-      reason: orchestratorResult.handoffReason || 'WEBCHAT_AI_HANDOFF',
-      priority: 'high',
-    });
+      suppressed: true,
+    };
   }
 
   await repos.messages.create({

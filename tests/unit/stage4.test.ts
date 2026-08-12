@@ -249,7 +249,7 @@ describe('Stage 4: Telegram Business MVP Unit & Integration Tests', () => {
         date: 1700000000,
         chat: { id: 888, type: 'private' as const },
         from: { id: 888, is_bot: false, first_name: 'Mijoz' },
-        text: 'Salom, mahsulotlar narxi qancha?',
+        text: 'Salom, sizlar qanday xizmat ko‘rsatasizlar?',
       },
     };
 
