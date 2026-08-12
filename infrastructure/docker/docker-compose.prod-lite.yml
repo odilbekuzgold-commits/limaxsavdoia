@@ -1,0 +1,134 @@
+networks:
+  limax-internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    logging: *default-logging
+    image: pgvector/pgvector:pg16
+    container_name: limax-postgres-prod
+    restart: unless-stopped
+    networks:
+      - limax-internal
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 320M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    logging: *default-logging
+    image: redis:7-alpine
+    container_name: limax-redis-prod
+    restart: unless-stopped
+    networks:
+      - limax-internal
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    logging: *default-logging
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    container_name: limax-api-prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - limax-internal
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - ${LIMAX_ENV_FILE:-/opt/limax-ai-manager/app/shared/.env.production}
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: '0.4'
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    logging: *default-logging
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    container_name: limax-worker-prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - limax-internal
+    env_file:
+      - ${LIMAX_ENV_FILE:-/opt/limax-ai-manager/app/shared/.env.production}
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.3'
+    stop_grace_period: 15s
+
+  dashboard:
+    logging: *default-logging
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.dashboard
+    container_name: limax-dashboard-prod
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - limax-internal
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - ${LIMAX_ENV_FILE:-/opt/limax-ai-manager/app/shared/.env.production}
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.4'

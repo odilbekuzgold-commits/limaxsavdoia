@@ -1,5 +1,25 @@
 {
   "name": "@limax/ai-engine",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.1.0"
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@limax/config": "workspace:*",
+    "@limax/logger": "workspace:*",
+    "@limax/shared": "workspace:*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
 }

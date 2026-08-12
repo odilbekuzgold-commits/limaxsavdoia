@@ -2,12 +2,13 @@
   "name": "limax-ai-manager",
   "private": true,
   "packageManager": "pnpm@9.15.0",
+  "type": "module",
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "test": "turbo run test"
+    "test": "node --test tests/unit/stage3.test.ts tests/unit/stage3_1.test.ts tests/unit/stage4.test.ts tests/unit/stage5.test.ts tests/unit/stage6.test.ts tests/unit/stage6_business_data.test.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

@@ -1,0 +1,16 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json turbo.json ./
+COPY packages ./packages
+COPY apps/worker ./apps/worker
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @limax/worker... build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+COPY --from=builder /app ./
+ENV NODE_ENV=production
+USER node
+CMD ["node", "apps/worker/dist/index.js"]

@@ -1,21 +1,63 @@
-import dotenv from 'dotenv';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { getEnv } from '@limax/config';
+import { createLogger } from '@limax/logger';
+import { closeDbPool } from '@limax/database';
+import { closeRedis } from '@limax/redis';
+import { createBlockingConsumer, type QueueJob } from '@limax/queue';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const env = getEnv();
+const logger = createLogger('limax-worker', env.LOG_LEVEL);
 
-dotenv.config({ path: resolve(__dirname, '../../.env') });
+let stopping = false;
+let consumer: Awaited<ReturnType<typeof createBlockingConsumer>> | null = null;
 
-console.log('[Worker] LImax Worker started');
-console.log(`[Worker] Environment: ${process.env.NODE_ENV ?? 'development'}`);
+async function processJob(job: QueueJob): Promise<void> {
+  switch (job.type) {
+    case 'healthcheck':
+      logger.info({ jobId: job.id }, '[Worker] Healthcheck job processed');
+      return;
+    default:
+      logger.warn({ jobId: job.id, jobType: job.type }, '[Worker] Unsupported job sent to dead-letter log');
+  }
+}
 
-process.on('SIGTERM', () => {
-  console.log('[Worker] Shutting down gracefully...');
-  process.exit(0);
-});
+async function run(): Promise<void> {
+  consumer = await createBlockingConsumer();
+  logger.info(`[Worker] Redis queue consumer started (${env.NODE_ENV})`);
+  let failures = 0;
 
-process.on('SIGINT', () => {
-  console.log('[Worker] Interrupted, shutting down...');
-  process.exit(0);
+  while (!stopping) {
+    try {
+      const job = await consumer.next(5);
+      if (job) await processJob(job);
+      failures = 0;
+    } catch (err) {
+      if (stopping) break;
+      failures += 1;
+      const delayMs = Math.min(500 * 2 ** failures, 10_000);
+      logger.error({ err, delayMs }, '[Worker] Queue error; retrying');
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+async function handleWorkerShutdown(signal: string) {
+  logger.info(`[Worker] Received ${signal}. Starting graceful shutdown...`);
+  stopping = true;
+  try {
+    await consumer?.close();
+    await Promise.all([closeDbPool(), closeRedis()]);
+    logger.info('[Worker] All connections closed cleanly. Exiting.');
+    process.exit(0);
+  } catch (err) {
+    logger.error({ err }, '[Worker] Error during shutdown');
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', () => handleWorkerShutdown('SIGINT'));
+process.on('SIGTERM', () => handleWorkerShutdown('SIGTERM'));
+
+run().catch((err) => {
+  logger.fatal({ err }, '[Worker] Failed to start queue consumer');
+  process.exit(1);
 });

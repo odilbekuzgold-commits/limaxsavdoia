@@ -1,0 +1,15 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+dist
+.next
+.turbo
+coverage
+logs
+experiments
+scratch
+*.log
+*.zip
+*.tar.gz

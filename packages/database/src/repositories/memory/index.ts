@@ -1,0 +1,17 @@
+export { InMemoryCustomerRepository } from './customer.repository.js';
+export { InMemoryContactRepository } from './contact.repository.js';
+export { InMemoryConversationRepository } from './conversation.repository.js';
+export { InMemoryMessageRepository } from './message.repository.js';
+export { InMemoryLeadRepository } from './lead.repository.js';
+export { InMemoryHandoffRepository } from './handoff.repository.js';
+export { InMemoryProductRepository } from './product.repository.js';
+export { InMemoryKnowledgeRepository } from './knowledge.repository.js';
+export { InMemoryTelegramBusinessConnectionRepository } from './telegram-connection.repository.js';
+export { InMemoryTelegramUpdateReceiptRepository } from './telegram-receipt.repository.js';
+export { InMemoryAIUsageRepository } from './ai-usage.repository.js';
+export { InMemoryProductPriceRepository } from './product-price.repository.js';
+export { InMemoryProductInventoryRepository } from './product-inventory.repository.js';
+export { InMemoryProductCertificateRepository } from './product-certificate.repository.js';
+export { InMemoryProductMediaRepository } from './product-media.repository.js';
+export { InMemorySalesSettingsRepository } from './sales-settings.repository.js';
+export { InMemoryAuditLogRepository } from './audit-log.repository.js';

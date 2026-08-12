@@ -1,0 +1,17 @@
+export { PgCustomerRepository } from './customer.repository.js';
+export { PgContactRepository } from './contact.repository.js';
+export { PgConversationRepository } from './conversation.repository.js';
+export { PgMessageRepository } from './message.repository.js';
+export { PgLeadRepository } from './lead.repository.js';
+export { PgHandoffRepository } from './handoff.repository.js';
+export { PgProductRepository } from './product.repository.js';
+export { PgKnowledgeRepository } from './knowledge.repository.js';
+export { PgTelegramBusinessConnectionRepository } from './telegram-connection.repository.js';
+export { PgTelegramUpdateReceiptRepository } from './telegram-receipt.repository.js';
+export { PgAIUsageRepository } from './ai-usage.repository.js';
+export { PgProductPriceRepository } from './product-price.repository.js';
+export { PgProductInventoryRepository } from './product-inventory.repository.js';
+export { PgProductCertificateRepository } from './product-certificate.repository.js';
+export { PgProductMediaRepository } from './product-media.repository.js';
+export { PgSalesSettingsRepository } from './sales-settings.repository.js';
+export { PgAuditLogRepository } from './audit-log.repository.js';

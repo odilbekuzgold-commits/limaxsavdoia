@@ -42,3 +42,9 @@ minio_data/
 # Uploads / media (runtime)
 uploads/
 media/
+
+# Archives & Temporary Scratch
+experiments/
+scratch/
+*.tar.gz
+*.zip
