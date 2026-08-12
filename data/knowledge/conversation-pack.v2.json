@@ -1,0 +1,100 @@
+[
+  {
+    "title": "Intent variants — price — Uzbek Latin",
+    "content": "Customer expressions: narx, narxi, narxchi, narxn bern, narx necpul, nechpul, qanaqa narx, qanchadan, narxi qancha hozir. Intent: PRICE. These phrases contain no current business fact. Ask for product/code if missing; use only current ACTIVE structured price if product is known.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:intent:price:uz-Latn"
+  },
+  {
+    "title": "Intent variants — stock — Uzbek Latin",
+    "content": "Customer expressions: bormi, qoldimi, tayyori bormi, hozir skladda bormi, ozroq bo‘lsa ham yo‘qmi. Intent: STOCK. Use structured inventory only. If inventory is UNKNOWN, never say available.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:intent:stock:uz-Latn"
+  },
+  {
+    "title": "Intent variants — price and stock — Uzbek Cyrillic",
+    "content": "Мижоз иборалари: нархи қанча, қанчадан, неч пул, борми, қолдими, тайёри борми, ҳозир складда борми. Intentlar: PRICE ва STOCK. Жавоб ўзбек кириллида бўлади. Нарх ва қолдиқ фақат structured data орқали тасдиқланади.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:intent:price-stock:uz-Cyrl"
+  },
+  {
+    "title": "Intent variants — price and stock — Russian",
+    "content": "Фразы клиента: какая цена, сколько стоит, почём, есть в наличии, осталось, есть на складе. Intent: PRICE или STOCK. Отвечать по-русски. Использовать только актуальную подтверждённую цену и structured inventory.",
+    "language": "ru",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:intent:price-stock:ru"
+  },
+  {
+    "title": "Textile customer vocabulary — packaging and orders",
+    "content": "Synonyms: babina/bobina = bobbin; katta/kotta babina = large bobbin; karobka/karopka = box or package; sklad = warehouse; zakaz = order; spes/spec/spets = specification or order document depending on context; obrazets/obrazes = sample; ostatka = remaining stock.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:dictionary:packaging-orders"
+  },
+  {
+    "title": "Textile customer vocabulary — payment and logistics",
+    "content": "Synonyms: perechesleniya = bank transfer; naxd/nal = cash; NDS = VAT/QQS; faktura = invoice; dovernost = power of attorney; shofyor/shafyor = driver; moshina/mashina/taksi = pickup or logistics; axrana/oxrana = security post; lokatsiya = location.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:dictionary:payment-logistics"
+  },
+  {
+    "title": "Textile customer vocabulary — quality, color and material",
+    "content": "Synonyms: brak = defective product; vozvrat = return; tuklik = fuzziness/quality complaint; panton/pantone = Pantone color standard; sostav = composition; seriy = grey; seryo = raw material. Do not confuse seriy with seryo.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:dictionary:quality-color-material"
+  },
+  {
+    "title": "Protected product tokens",
+    "content": "Preserve these product/spec tokens exactly: 30/70, 20/70, 15/55, 15/75, 20/75, 75D/36, 70D/2, 40D/2, 2070K, 3070K. Do not invent or expand their technical meaning unless structured product data confirms it.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:tokens:products"
+  },
+  {
+    "title": "Intent variants — sample, catalog and specification",
+    "content": "obrazets, obrazes, namuna, bir bobina ko‘rsak = SAMPLE; katalog, rasmni tashabering, ip rasmini yuboring = CATALOG_OR_MEDIA; spes, spec, spets, zakaz yozaman = SPECIFICATION_OR_ORDER_ACTION. Sample or catalog availability must be verified before promising it.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:intent:sample-catalog-spec"
+  },
+  {
+    "title": "Intent variants — complaint and return",
+    "content": "Customer expressions: sifati yaxshimi, tuklik qilyapti, brak, qaytarilgan ip, almashtirib berasizmi, o‘zingizga qaytaraman. Intent: COMPLAINT_OR_RETURN. Required flow: brief apology, request photo/video/sample, create high-priority manager or technologist handoff. Never promise replacement, refund or compensation without approval.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:intent:complaint-return"
+  },
+  {
+    "title": "Intent variants — export and large order",
+    "content": "Other-country destination, export price/documents, tonnage quantity, repeat order, ‘zakaz yozaman’, ‘bugun olamiz’ and vehicle pickup are strong purchase signals. Classify export and qualified large orders as HOT/high priority and create manager handoff after collecting only the missing essential details.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:intent:export-large-order"
+  },
+  {
+    "title": "Safe dialog patterns — unknown business facts",
+    "content": "If current price is missing: ‘Bu mahsulot bo‘yicha amaldagi narx tasdiqlanmagan. Qancha miqdor kerak edi?’ If stock is UNKNOWN: ‘Hozirgi qoldiq tasdiqlanmagan. Qancha miqdor kerak edi?’ Never use historical Telegram values. Never say ‘tekshiraman’ unless a real check or handoff was successfully started.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:dialog:unknown-facts"
+  },
+  {
+    "title": "Safe dialog patterns — Uzbek Cyrillic",
+    "content": "Мижоз: ‘30/70 оқдан борми?’ Агар inventory UNKNOWN бўлса: ‘Ҳозирги қолдиқ тасдиқланмаган. Қанча миқдор керак эди?’ Мижоз кириллда ёзса, жавоб ўзбек кириллида берилади ва product token ўзгармайди.",
+    "language": "uz",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:dialog:uz-Cyrl"
+  },
+  {
+    "title": "Safe dialog patterns — Russian",
+    "content": "Клиент: ‘Есть 30/70 белый?’ Если inventory UNKNOWN: ‘Актуальный остаток пока не подтверждён. Какое количество вам нужно?’ Сохранять product token без изменений и отвечать по-русски.",
+    "language": "ru",
+    "status": "DRAFT",
+    "source": "conversation-pack-v2:dialog:ru"
+  }
+]

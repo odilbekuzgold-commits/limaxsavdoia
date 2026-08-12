@@ -58,30 +58,34 @@ export function detectLanguage(text: string): SupportedLanguage {
     return 'zh';
   }
 
-  // Cyrillic script checking (ru, tg, kk, ky)
+  // Cyrillic script checking (ru, uz-Cyrl, tg, kk, ky)
   if (/[\u0400-\u04FF]/.test(text)) {
-    // Kazakh specific unique characters or words (ә, ұ, і, сәлем, бағасы, қанша)
-    if (/[әұі]/i.test(lower) || /(сәлем|бағасы|қанша)/i.test(lower)) {
+    // Kazakh specific unique characters or words
+    if (/[әұі]/i.test(lower) || /(сәлем|бағасы)/i.test(lower)) {
       return 'kk';
     }
     // Kyrgyz specific unique characters or words
     if (/(салам|баасы|канча)/i.test(lower)) {
       return 'ky';
     }
-    // Tajiki specific unique characters or words (ӣ, ӯ, ҳ, ҷ, нархи, чихел)
-    if (/[ӣӯҳҷ]/i.test(lower) || /(нархи|чихел)/i.test(lower)) {
+    // Tajiki specific unique characters or words (чанд, чихел, ӣ, ӯ, ҷ)
+    if (/[ӣӯҷ]/i.test(lower) || /(чанд|чихел|сомонӣ)/i.test(lower)) {
       return 'tg';
+    }
+    // Uzbek Cyrillic specific characters (ў, қ, ғ, ҳ) or Uzbek words in Cyrillic
+    if (/[ўқғҳ]/i.test(lower) || /(салом|раҳмат|рахмат|қанша|қанча|нархи|полиэстер|иплар)/i.test(lower)) {
+      return 'uz-Cyrl';
     }
     // Russian default for Cyrillic
     return 'ru';
   }
 
   // English indicators
-  if (/(hello|hi|price|cost|buy|order|catalog|product|how much)/i.test(lower)) {
+  if (/(hello|hi|price|cost|buy|order|catalog|product|how much)/i.test(lower) && !/(salom|rahmat|yuboring|narxi|ip)/i.test(lower)) {
     return 'en';
   }
 
-  // Default Uzbek
+  // Default Uzbek Latin
   return 'uz';
 }
 
@@ -194,6 +198,15 @@ export function applyGuardrails(
       allowed: false,
       reason: 'FORBIDDEN_TOPIC_POLITICS_RELIGION',
       triggerHandoff: true,
+    };
+  }
+
+  // 1b. Complaints & Unverified Sample Requests (High Priority Handoff)
+  if (/(tuklik|brak|vozvrat|sifati yaxshimi|образц|образец|obrazets|obrazes|namuna)/i.test(lower)) {
+    return {
+      allowed: true,
+      triggerHandoff: true,
+      reason: lower.includes('tuklik') || lower.includes('brak') || lower.includes('vozvrat') ? 'COMPLAINT_HANDOFF' : 'SAMPLE_UNVERIFIED_HANDOFF',
     };
   }
 

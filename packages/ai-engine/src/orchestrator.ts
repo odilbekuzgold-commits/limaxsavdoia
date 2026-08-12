@@ -79,6 +79,32 @@ export class AIOrchestrator {
       };
     }
 
+    if (guard.triggerHandoff && guard.reason === 'COMPLAINT_HANDOFF') {
+      return {
+        replyText: 'Kechirasiz, mahsulot sifati boʻyicha muammo yuzaga kelganidan afsusdamiz. Iltimos, rasm yoki video yuboring, menejerimiz koʻrib chiqadi.',
+        language: lang,
+        intent: 'complaint',
+        confidence: 0.8,
+        needsHandoff: true,
+        handoffReason: 'COMPLAINT_HIGH_PRIORITY',
+        leadSignals: {},
+        usedKnowledgeIds: [],
+      };
+    }
+
+    if (guard.triggerHandoff && guard.reason === 'SAMPLE_UNVERIFIED_HANDOFF') {
+      return {
+        replyText: 'Kechirasiz, namunalar va kataloglar boʻyicha maʼlumot menejerimiz tomonidan tasdiqlanadi. Tez orada bogʻlanamiz.',
+        language: lang,
+        intent: 'sample_request',
+        confidence: 0.8,
+        needsHandoff: true,
+        handoffReason: 'SAMPLE_UNVERIFIED',
+        leadSignals: {},
+        usedKnowledgeIds: [],
+      };
+    }
+
     // 2. Structured Product & Business Data Source (Priority 1)
     let availableProducts: Product[] = context.availableProducts || [];
     if (repos && availableProducts.length === 0) {
@@ -93,7 +119,10 @@ export class AIOrchestrator {
       lowerPrompt.includes('price') ||
       lowerPrompt.includes('moq') ||
       lowerPrompt.includes('ombor') ||
-      lowerPrompt.includes('stock');
+      lowerPrompt.includes('stock') ||
+      lowerPrompt.includes('bormi') ||
+      lowerPrompt.includes('борми') ||
+      lowerPrompt.includes('есть');
 
     if (isPriceOrStockQuery) {
       if (matchedProducts.length > 0) {

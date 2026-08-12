@@ -40,6 +40,8 @@ export type KnowledgeStatus = z.infer<typeof KnowledgeStatusEnum>;
 
 export const SupportedLanguageEnum = z.enum([
   'uz',
+  'uz-Latn',
+  'uz-Cyrl',
   'ru',
   'en',
   'zh',
@@ -430,7 +432,7 @@ export type TelegramUpdateReceipt = z.infer<typeof TelegramUpdateReceiptSchema>;
 // AI Structured Result Schema
 export const AIStructuredResultSchema = z.object({
   replyText: z.string(),
-  language: z.enum(['uz', 'ru', 'en', 'zh', 'tg', 'kk', 'ky']).default('uz'),
+  language: z.enum(['uz', 'uz-Latn', 'uz-Cyrl', 'ru', 'en', 'zh', 'tg', 'kk', 'ky']).default('uz'),
   intent: z.string().default('general_inquiry'),
   confidence: z.number().min(0).max(1).default(1.0),
   needsHandoff: z.boolean().default(false),

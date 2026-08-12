@@ -2,8 +2,8 @@ declare namespace NodeJS {
   interface ProcessEnv {
     [key: string]: string | undefined;
   }
+  interface Process {
+    cwd(): string;
+    env: ProcessEnv;
+  }
 }
-
-declare const process: {
-  env: Record<string, string | undefined>;
-};
