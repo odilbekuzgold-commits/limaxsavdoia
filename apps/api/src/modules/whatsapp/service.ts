@@ -110,11 +110,13 @@ export async function processWhatsAppUpdate(
 
   // AI Orchestration
   const convMessages = await repos.messages.findByConversationId(conv.id);
+  const isNewConversation = convMessages.filter((m: { senderType: string }) => m.senderType === 'customer').length <= 1;
   const aiContext = {
     conversationId: conv.id,
     customerId,
     customerName,
     preferredLanguage: detectedLang,
+    isNewConversation,
     conversationHistory: convMessages.map((m: { senderType: string; content: string }) => ({
       role: m.senderType === 'customer' ? ('user' as const) : ('assistant' as const),
       content: m.content,

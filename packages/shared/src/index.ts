@@ -392,9 +392,12 @@ export interface AIContext {
   customerId?: string;
   customerName?: string;
   preferredLanguage?: SupportedLanguage;
+  /** Explicit flag set by service layer: true on very first message of a conversation */
+  isNewConversation?: boolean;
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
   availableProducts?: Product[];
-  knowledgeSnippets?: string[];
+  /** APPROVED knowledge items only — injected by orchestrator before calling provider */
+  approvedKnowledgeItems?: Array<{ id: string; title: string; content: string }>;
   lastResponse?: string;
 }
 

@@ -19,9 +19,11 @@ export function buildSalesSystemPrompt(
   const lang = options?.language || context?.preferredLanguage || 'uz';
   parts.push('\n## TARGET LANGUAGE & SCRIPT INSTRUCTION');
   if (lang === 'uz-Cyrl') {
-    parts.push('Mijoz alifbosi: O‘zbek kirill. Barcha javoblarni faqat O‘zbek kirill alifbosida (Ў, Қ, Ғ, Ҳ) yozing.');
+    parts.push(
+      "Mijoz alifbosi: O'zbek kirill. Barcha javoblarni faqat O'zbek kirill alifbosida (U, Q, G, H harflarining kirill shakllari) yozing."
+    );
   } else if (lang === 'ru') {
-    parts.push('Mijoz tili: Rus tili. Отвечайте строго на русском языке.');
+    parts.push('Mijoz tili: Rus tili. Otvechayte strogо na russkom yazyke.');
   } else if (lang === 'en') {
     parts.push('Customer language: English. Respond strictly in English.');
   } else if (lang === 'zh') {
@@ -33,37 +35,56 @@ export function buildSalesSystemPrompt(
   } else if (lang === 'ky') {
     parts.push('Customer language: Kyrgyz. Respond strictly in Kyrgyz language.');
   } else {
-    parts.push('Mijoz alifbosi: O‘zbek lotin. Barcha javoblarni faqat O‘zbek lotin alifbosida yozing.');
+    // uz / uz-Latn
+    parts.push(
+      "Mijoz alifbosi: O'zbek lotin. Barcha javoblarni faqat O'zbek lotin alifbosida yozing."
+    );
   }
-  parts.push('Mahsulot kodi va belgilarini (masalan: 30/70, 75D/36, 2070K) o‘zgartirmasdan aynan saqlang.');
+  parts.push(
+    "Mahsulot kodi va belgilarini (masalan: 30/70, 75D/36, 2070K) o'zgartirmasdan aynan saqlang."
+  );
 
-  // 3. Structured Product / Pricing / Inventory Context (Priority 1)
+  // 3. Structured Product / Pricing / Inventory Context (Priority 1 — no fabricated defaults)
   if (context?.availableProducts && context.availableProducts.length > 0) {
     parts.push('\n## STRUCTURED PRODUCT DATA (SUPERCEDES GENERAL KNOWLEDGE BASE)');
     context.availableProducts.forEach((p: Product) => {
       parts.push(`- Product ID: ${p.id}`);
       parts.push(`  Name: ${p.name}`);
-      parts.push(`  Category: ${p.category}`);
-      parts.push(`  Description: ${p.description}`);
-      parts.push(`  Active Price: ${p.price} ${p.currency || 'USD'}`);
-      parts.push(`  Minimum Order (MOQ): ${p.minimumOrder || 1}`);
-      parts.push(`  Stock Status: ${p.stockStatus || 'in_stock'}`);
+      parts.push(`  Category: ${p.category ?? 'UNKNOWN'}`);
+      parts.push(`  Description: ${p.description ?? 'UNKNOWN'}`);
+      // Price: only emit if explicitly set and non-zero
+      if (p.price !== undefined && p.price !== null && p.price > 0) {
+        parts.push(`  Active Price: ${p.price} ${p.currency ?? 'UNKNOWN'}`);
+      } else {
+        parts.push(`  Active Price: UNKNOWN (contact manager)`);
+      }
+      // MOQ: only emit if explicitly set and > 0
+      if (p.minimumOrder !== undefined && p.minimumOrder !== null && p.minimumOrder > 0) {
+        parts.push(`  Minimum Order (MOQ): ${p.minimumOrder}`);
+      } else {
+        parts.push(`  Minimum Order (MOQ): UNKNOWN`);
+      }
+      // Stock: only emit known statuses, never default to "in_stock"
+      const knownStockStatuses = ['in_stock', 'out_of_stock', 'low_stock'];
+      if (p.stockStatus && knownStockStatuses.includes(p.stockStatus)) {
+        parts.push(`  Stock Status: ${p.stockStatus}`);
+      } else {
+        parts.push(`  Stock Status: UNKNOWN`);
+      }
     });
   }
 
-  // 4. Approved Knowledge Base Context (Priority 2) - Filter out DRAFT, REJECTED, ARCHIVED
-  if (options?.knowledgeItems && options.knowledgeItems.length > 0) {
-    const approvedOnly = options.knowledgeItems.filter((k) => k.status === 'APPROVED');
-    if (approvedOnly.length > 0) {
-      parts.push('\n## APPROVED KNOWLEDGE BASE CONTEXT (ONLY APPROVED ITEMS USABLE)');
-      approvedOnly.forEach((item) => {
-        parts.push(`[ID: ${item.id}] ${item.title}: ${item.content}`);
-      });
-    }
-  } else if (context?.knowledgeSnippets && context.knowledgeSnippets.length > 0) {
-    parts.push('\n## APPROVED KNOWLEDGE BASE CONTEXT');
-    context.knowledgeSnippets.forEach((snippet: string) => {
-      parts.push(`- ${snippet}`);
+  // 4. Approved Knowledge Base Context (Priority 2)
+  // Uses typed approvedKnowledgeItems from AIContext (APPROVED-filtered by orchestrator)
+  // OR falls back to knowledgeItems option filtered to APPROVED status
+  const approvedItems =
+    context?.approvedKnowledgeItems ??
+    (options?.knowledgeItems ?? []).filter((k) => k.status === 'APPROVED');
+
+  if (approvedItems.length > 0) {
+    parts.push('\n## APPROVED KNOWLEDGE BASE CONTEXT (ONLY APPROVED ITEMS USABLE)');
+    approvedItems.forEach((item) => {
+      parts.push(`[ID: ${item.id}] ${item.title}: ${item.content}`);
     });
   }
 
@@ -76,7 +97,7 @@ Respond ONLY with a single valid JSON object matching this schema (no markdown w
   "intent": "general_inquiry" | "product_price" | "product_stock" | "sample_request" | "order" | "complaint" | "security_blocked",
   "confidence": 0.0 to 1.0,
   "needsHandoff": boolean,
-  "handoffReason": "Optional string",
+  "handoffReason": "Optional string — only when needsHandoff is true",
   "leadSignals": {
     "productNeed": "Optional string",
     "quantity": "Optional string",
@@ -86,7 +107,12 @@ Respond ONLY with a single valid JSON object matching this schema (no markdown w
     "authority": "Optional string"
   },
   "usedKnowledgeIds": []
-}`);
+}
+STRICT RULES:
+- Never invent a price, MOQ, or stock level not present in STRUCTURED PRODUCT DATA.
+- If price is UNKNOWN, say so and direct to manager.
+- If MOQ is UNKNOWN, say so and direct to manager.
+- If stock is UNKNOWN, say UNKNOWN — never claim it is available.`);
 
   return parts.join('\n');
 }

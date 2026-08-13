@@ -167,16 +167,21 @@ export async function processTelegramUpdate(
 
   // 10. AI Response & Guardrail Processing via AIOrchestrator
   const convMessages = await repos.messages.findByConversationId(conv.id);
+  // isNewConversation = true only if this is the very first incoming message
+  // (convMessages contains only the one we just saved above, so length === 1)
+  const isNewConversation = convMessages.filter((m) => m.senderType === 'customer').length <= 1;
   const aiContext = {
     conversationId: conv.id,
     customerId,
     customerName,
     preferredLanguage: detectedLang,
+    isNewConversation,
     conversationHistory: convMessages.map((m) => ({
       role: m.senderType === 'customer' ? ('user' as const) : ('assistant' as const),
       content: m.content,
     })),
   };
+
 
   const orchestratorResult = await orchestrator.processQuery(normalized.text, aiContext, { repos });
 

@@ -3,6 +3,11 @@ import { detectLanguage } from '../index.js';
 import type { IAIProviderAdapter, ProviderRequestOptions, ProviderRawResponse } from './types.js';
 
 // ──────────────────────────────────────────────
+// Mojibake guard: verify no corrupted chars in strings
+// ──────────────────────────────────────────────
+export const MOJIBAKE_RE = /[\u00C3\u00C2\u00D0\u00D1\u00E2\u008E\u00CA\u00BC]/u;
+
+// ──────────────────────────────────────────────
 // Intent types
 // ──────────────────────────────────────────────
 type MockIntent =
@@ -26,9 +31,12 @@ const PRODUCT_TOKEN_RE =
 
 // ──────────────────────────────────────────────
 // Detect intent from message text
+// Priority: Security > Complaint > Manager > Order > Sample > Catalog
+//   > Product+Stock combined > Price > Stock-only > Product-only > Greeting
+// NOTE: "mahsulotlar bormi" must resolve as PRODUCT_INQUIRY, not STOCK
 // ──────────────────────────────────────────────
 function detectIntent(lower: string): MockIntent {
-  // Security first
+  // 1. Security injection
   if (
     lower.includes('system prompt') ||
     lower.includes('api key') ||
@@ -40,15 +48,30 @@ function detectIntent(lower: string): MockIntent {
     return 'PROMPT_INJECTION';
   }
 
+  // 2. High-priority complaint/order/sample/manager
   if (/(brak|tuklik|qaytarish|vozvrat|sifatsiz|nosoz)/i.test(lower)) return 'COMPLAINT';
   if (/(menejer|менежер|manager bilan|manager kerak)/i.test(lower)) return 'MANAGER_REQUEST';
   if (/(zakaz|buyurtma|тонна|tonna|kg kerak|kilogram kerak)/i.test(lower)) return 'ORDER';
   if (/(namuna|образец|obrazets|obrazes)/i.test(lower)) return 'SAMPLE';
   if (/(katalog|rasm|catalog|фото|photo)/i.test(lower)) return 'CATALOG';
+
+  // 3. Price intent (before stock/product to catch "narx" combos)
   if (/(narx|narxi|narxlar|нарх|nechpul|necpul|qanchadan|qancha|price|cost)/i.test(lower)) return 'PRICE';
+
+  // 4. Product word present — PRODUCT_INQUIRY wins even if "bormi" also present
+  //    "mahsulotlar bormi" = asking about product existence → PRODUCT_INQUIRY
+  if (/(mahsulot|mahsulotlar|iplar|polyester|poliyester|dty|fdy|poy|sdy|yarn)/i.test(lower)) {
+    return 'PRODUCT_INQUIRY';
+  }
+
+  // 5. Pure stock query (no product context word)
   if (/(bormi|mavjudmi|qoldiq|sklad|ombor|склад|stok|stock)/i.test(lower)) return 'STOCK';
-  if (/(mahsulot|ip|polyester|poliyester|dty|fdy|poy|sdy|yarn|materia|iplar)/i.test(lower)) return 'PRODUCT_INQUIRY';
-  if (/(salom|assalomu alaykum|привет|hello|hi\b|хай)/i.test(lower)) return 'GREETING';
+
+  // 6. General product inquiry ("ip kerak")
+  if (/\bip\b|materia/i.test(lower)) return 'PRODUCT_INQUIRY';
+
+  // 7. Greeting
+  if (/(salom|assalomu alaykum|привет|hello|\bhi\b|хай)/i.test(lower)) return 'GREETING';
 
   return 'UNKNOWN';
 }
@@ -64,17 +87,21 @@ function buildReply(
   isNewConversation: boolean
 ): Pick<AIStructuredResult, 'replyText' | 'intent' | 'confidence' | 'needsHandoff' | 'handoffReason' | 'leadSignals'> {
   const isRu = lang === 'ru';
+  const isCyrl = lang === 'uz-Cyrl';
 
   // Extract product token from message if present
   const tokenMatch = lower.match(PRODUCT_TOKEN_RE);
   const productToken = tokenMatch ? tokenMatch[0].toUpperCase() : null;
 
   switch (intent) {
+    // ── Security ──────────────────────────────
     case 'PROMPT_INJECTION':
       return {
         replyText: isRu
-          ? 'Извините, я не могу раскрывать внутренние данные системы.'
-          : 'Kechirasiz, xavfsizlik va ichki tizim maʼlumotlarini ochiqlay olmayman.',
+          ? 'Izvinite, ya ne mogu raskryvat vnutrennie dannye sistemy.'
+          : isCyrl
+          ? 'Kechirasiz, xavfsizlik va ichki tizim malumotlarini ochinqlay olmayman.'
+          : 'Kechirasiz, xavfsizlik va ichki tizim malumotlarini ochiqlay olmayman.',
         intent: 'security_blocked',
         confidence: 0.1,
         needsHandoff: true,
@@ -82,11 +109,16 @@ function buildReply(
         leadSignals: {},
       };
 
+    // ── Greeting ──────────────────────────────
     case 'GREETING':
       if (!isNewConversation) {
-        // Active conversation: don't re-greet, ask what's needed
+        // Active conversation: short reply, no re-welcome
         return {
-          replyText: isRu ? 'Чем могу помочь?' : 'Qanday yordam bera olaman?',
+          replyText: isRu
+            ? 'Chem mogu pomoch?'
+            : isCyrl
+            ? 'Qanday yordam bera olaman?'
+            : 'Qanday yordam bera olaman?',
           intent: 'general_inquiry',
           confidence: 0.9,
           needsHandoff: false,
@@ -95,21 +127,26 @@ function buildReply(
       }
       return {
         replyText: isRu
-          ? 'Здравствуйте! Я помогаю с информацией о полиэфирной пряже LImax. По какому продукту нужна информация?'
-          : 'Assalomu alaykum! LImax ip mahsulotlari bo\'yicha yordam beraman. Qaysi mahsulot bo\'yicha ma\'lumot kerak?',
+          ? 'Zdravstvuyte! Pomogayu s informaciyey o poliefirnoy pryazhe LImax. Po kakomu produktu nuzhna informaciya?'
+          : isCyrl
+          ? "Assalomu alaykum! LImax ip mahsulotlari bo'yicha yordam beraman. Qaysi mahsulot bo'yicha ma'lumot kerak?"
+          : "Assalomu alaykum! LImax ip mahsulotlari bo'yicha yordam beraman. Qaysi mahsulot bo'yicha ma'lumot kerak?",
         intent: 'general_inquiry',
         confidence: 0.95,
         needsHandoff: false,
         leadSignals: {},
       };
 
+    // ── Product Inquiry ───────────────────────
     case 'PRODUCT_INQUIRY': {
       const products = context.availableProducts || [];
       if (productToken) {
-        // Code already known — don't ask again
+        // Code already known — confirm and ask for params, do NOT re-ask product type
         return {
           replyText: isRu
-            ? `Понял, нужна нить ${productToken}. Уточните параметры или количество?`
+            ? `Ponyal, nuzhna nit ${productToken}. Utochnite parametry ili kolichestvo?`
+            : isCyrl
+            ? `Tushundim, ${productToken} kerak. Miqdor yoki parametr aytasiz?`
             : `Tushundim, ${productToken} kerak. Miqdor yoki parametr aytasiz?`,
           intent: 'product_stock',
           confidence: 0.9,
@@ -121,11 +158,13 @@ function buildReply(
         const list = products
           .filter((p) => p.active)
           .slice(0, 5)
-          .map((p) => `• ${p.name}`)
+          .map((p) => `* ${p.name}`)
           .join('\n');
         return {
           replyText: isRu
-            ? `Доступные продукты:\n${list}\n\nКакой именно нужен?`
+            ? `Dostupnye produkty:\n${list}\n\nKakoy imenno nuzhen?`
+            : isCyrl
+            ? `Mavjud mahsulotlar:\n${list}\n\nQaysi biri kerak?`
             : `Mavjud mahsulotlar:\n${list}\n\nQaysi biri kerak?`,
           intent: 'product_stock',
           confidence: 0.9,
@@ -135,7 +174,9 @@ function buildReply(
       }
       return {
         replyText: isRu
-          ? 'Какой тип нити нужен?'
+          ? 'Kakoye tip niti nuzhen?'
+          : isCyrl
+          ? 'Qaysi turdagi ip kerak edi?'
           : 'Qaysi turdagi ip kerak edi?',
         intent: 'product_stock',
         confidence: 0.85,
@@ -144,12 +185,15 @@ function buildReply(
       };
     }
 
+    // ── Price ─────────────────────────────────
     case 'PRICE': {
-      // Never invent price — ask for product/code
+      // Never invent price — ask for product/code or send to manager if code known
       if (productToken) {
         return {
           replyText: isRu
-            ? `Цена ${productToken} уточняется. Менеджер свяжется с вами.`
+            ? `Tsena ${productToken} utochnyaetsya. Menedzher svyazhetsya s vami.`
+            : isCyrl
+            ? `${productToken} narxi tasdiqlanmagan. Menejer siz bilan bog'lanadi.`
             : `${productToken} narxi tasdiqlanmagan. Menejer siz bilan bog'lanadi.`,
           intent: 'product_price',
           confidence: 0.7,
@@ -160,7 +204,9 @@ function buildReply(
       }
       return {
         replyText: isRu
-          ? 'Укажите код или тип продукта для уточнения цены.'
+          ? 'Ukazhite kod ili tip produkta dlya utochneniya tseny.'
+          : isCyrl
+          ? 'Narxni bilish uchun mahsulot kodi yoki turini ayting.'
           : 'Narxni bilish uchun mahsulot kodi yoki turini ayting.',
         intent: 'product_price',
         confidence: 0.85,
@@ -169,6 +215,7 @@ function buildReply(
       };
     }
 
+    // ── Stock ─────────────────────────────────
     case 'STOCK': {
       const products = context.availableProducts || [];
       if (productToken) {
@@ -178,14 +225,12 @@ function buildReply(
         if (matched) {
           const stockText =
             matched.stockStatus === 'in_stock'
-              ? (isRu ? 'есть в наличии' : 'mavjud')
+              ? (isRu ? 'est v nalichii' : 'mavjud')
               : matched.stockStatus === 'out_of_stock'
-              ? (isRu ? 'нет в наличии' : 'mavjud emas')
-              : (isRu ? 'уточняется' : 'tasdiqlanmagan');
+              ? (isRu ? 'net v nalichii' : 'mavjud emas')
+              : (isRu ? 'utochnyaetsya' : 'UNKNOWN');
           return {
-            replyText: isRu
-              ? `${matched.name} — ${stockText}.`
-              : `${matched.name} — ${stockText}.`,
+            replyText: `${matched.name} — ${stockText}.`,
             intent: 'product_stock',
             confidence: 0.9,
             needsHandoff: false,
@@ -193,11 +238,13 @@ function buildReply(
           };
         }
       }
-      // Unknown stock — never claim available
+      // Unknown stock — never hallucinate, say UNKNOWN
       return {
         replyText: isRu
-          ? 'Наличие уточняется. Какой продукт вас интересует?'
-          : 'Hozirgi qoldiq tasdiqlanmagan. Qaysi mahsulot kerak edi?',
+          ? 'Nalichie: UNKNOWN. Kakoye produkt interesует?'
+          : isCyrl
+          ? 'Qoldiq: UNKNOWN. Qaysi mahsulot kerak edi?'
+          : 'Qoldiq: UNKNOWN. Qaysi mahsulot kerak edi?',
         intent: 'product_stock',
         confidence: 0.75,
         needsHandoff: false,
@@ -205,11 +252,14 @@ function buildReply(
       };
     }
 
+    // ── Sample ────────────────────────────────
     case 'SAMPLE':
       return {
         replyText: isRu
-          ? 'По вопросу образца свяжем вас с менеджером.'
-          : 'Namuna bo\'yicha menejer bilan bog\'laymiz.',
+          ? 'Po voprosu obraztsa svyazhem vas s menedzherom.'
+          : isCyrl
+          ? "Namuna bo'yicha menejer bilan bog'laymiz."
+          : "Namuna bo'yicha menejer bilan bog'laymiz.",
         intent: 'sample_request',
         confidence: 0.85,
         needsHandoff: true,
@@ -217,10 +267,13 @@ function buildReply(
         leadSignals: {},
       };
 
+    // ── Catalog ───────────────────────────────
     case 'CATALOG':
       return {
         replyText: isRu
-          ? 'Каталог отправим через менеджера. Какой продукт интересует?'
+          ? 'Katalog otpravim cherez menedzhera. Kakoye produkt interesuet?'
+          : isCyrl
+          ? 'Katalog menejer orqali yuboriladi. Qaysi mahsulot qiziqtiradi?'
           : 'Katalog menejer orqali yuboriladi. Qaysi mahsulot qiziqtiradi?',
         intent: 'general_inquiry',
         confidence: 0.8,
@@ -228,10 +281,13 @@ function buildReply(
         leadSignals: {},
       };
 
+    // ── Manager ───────────────────────────────
     case 'MANAGER_REQUEST':
       return {
         replyText: isRu
-          ? 'Передаю вас менеджеру. Пожалуйста, ожидайте.'
+          ? 'Peredayu vas menedzheru. Pozhaluysta, ozhidayte.'
+          : isCyrl
+          ? 'Menejerga ulaymiz. Kutib turing.'
           : 'Menejerga ulaymiz. Kutib turing.',
         intent: 'general_inquiry',
         confidence: 0.95,
@@ -240,10 +296,13 @@ function buildReply(
         leadSignals: {},
       };
 
+    // ── Complaint ─────────────────────────────
     case 'COMPLAINT':
       return {
         replyText: isRu
-          ? 'Извините за неудобство. Можете отправить фото или видео?'
+          ? 'Izvinite za neudobstvo. Mozhete otpravit foto ili video?'
+          : isCyrl
+          ? 'Noqulaylik uchun uzr. Rasm yoki video yuborasizmi?'
           : 'Noqulaylik uchun uzr. Rasm yoki video yuborasizmi?',
         intent: 'complaint',
         confidence: 0.95,
@@ -252,11 +311,14 @@ function buildReply(
         leadSignals: {},
       };
 
+    // ── Order ─────────────────────────────────
     case 'ORDER': {
       const qty = lower.match(/(\d+)\s*(tonna|kg|kilogram|тонн|кг)/i)?.[0] || null;
       return {
         replyText: isRu
-          ? `Понял, нужен заказ${qty ? ` (${qty})` : ''}. Укажите продукт и параметры — передам менеджеру.`
+          ? `Ponyal, nuzhen zakaz${qty ? ` (${qty})` : ''}. Ukazhite produkt i parametry — peredам menedzheru.`
+          : isCyrl
+          ? `Tushundim, buyurtma${qty ? ` (${qty})` : ''} kerak. Mahsulot va parametrlarni ayting — menejerga ulaymiz.`
           : `Tushundim, buyurtma${qty ? ` (${qty})` : ''} kerak. Mahsulot va parametrlarni ayting — menejerga ulaymiz.`,
         intent: 'order',
         confidence: 0.9,
@@ -266,12 +328,15 @@ function buildReply(
       };
     }
 
+    // ── Unknown ───────────────────────────────
     case 'UNKNOWN':
     default:
       return {
         replyText: isRu
-          ? 'По какому продукту нужна информация?'
-          : 'Qaysi mahsulot bo\'yicha ma\'lumot kerak edi?',
+          ? 'Po kakomu produktu nuzhna informaciya?'
+          : isCyrl
+          ? "Qaysi mahsulot bo'yicha ma'lumot kerak edi?"
+          : "Qaysi mahsulot bo'yicha ma'lumot kerak edi?",
         intent: 'general_inquiry',
         confidence: 0.7,
         needsHandoff: false,
@@ -281,7 +346,7 @@ function buildReply(
 }
 
 // ──────────────────────────────────────────────
-// Mock AI Provider Adapter — intent-aware
+// Mock AI Provider Adapter — intent-aware, no mojibake
 // ──────────────────────────────────────────────
 export class MockAIProviderAdapter implements IAIProviderAdapter {
   readonly providerName = 'mock' as const;
@@ -299,12 +364,19 @@ export class MockAIProviderAdapter implements IAIProviderAdapter {
     const lang = context.preferredLanguage || detectLanguage(prompt);
     const lower = prompt.toLowerCase();
 
-    // Determine if this is a new conversation (no prior history)
+    // Determine if this is a new conversation using explicit service-layer signal first,
+    // falling back to history length as a safety net
     const isNewConversation =
-      !context.conversationHistory || context.conversationHistory.length === 0;
+      context.isNewConversation === true ||
+      (!context.conversationHistory || context.conversationHistory.length === 0);
 
     const intent = detectIntent(lower);
     const { replyText, ...rest } = buildReply(intent, lower, lang, context, isNewConversation);
+
+    // Runtime safety: ensure no mojibake markers leaked into response
+    if (MOJIBAKE_RE.test(replyText)) {
+      throw new Error(`ENCODING_ERROR: mojibake detected in mock reply: ${replyText.slice(0, 60)}`);
+    }
 
     const result: AIStructuredResult = {
       replyText,
