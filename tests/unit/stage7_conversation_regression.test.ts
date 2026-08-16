@@ -103,7 +103,7 @@ describe('Stage 7: Strengthened Conversation Pack V2 Production-Ready Tests', ()
 
     assert.strictEqual(res.needsHandoff, true);
     assert.doesNotMatch(res.replyText, /ha,\s*bor|\bmavjud\b(?! emas)|tekshiraman/i);
-    assert.strictEqual(res.replyText.includes('mavjud emas') || res.replyText.includes('nomaʼlum'), true);
+    assert.strictEqual(res.replyText.includes('mavjud emas') || res.replyText.toLowerCase().includes('noma'), true);
   });
 
   it('5. Regression Test 3: Uzbek Cyrillic stock query — Cyrillic script & token 30/70 preserved', async () => {

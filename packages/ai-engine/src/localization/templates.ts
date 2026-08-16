@@ -50,7 +50,7 @@ export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates>
     sampleUnverified: () =>
       'Kechirasiz, namunalar va kataloglar mavjudligi menejerimiz tomonidan tasdiqlanadi. Tez orada bogʻlanamiz.',
     managerHandoff: () =>
-      'Murojaatingiz menejerga oshirildi. Tez orada siz bilan bogʻlanamiz.',
+      'Murojaatingiz menejerlarimizga yuborildi. Tez orada siz bilan bog‘lanamiz.\nMenejerlar guruhi: https://t.me/limaxmanagerlari1',
     securityBlocked: () =>
       'Kechirasiz, ushbu savol boʻyicha javob bera olmayman. Menejerimiz tez orada bogʻlanadi.',
     identityResponse: () =>
@@ -61,7 +61,7 @@ export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates>
   'uz-Cyrl': {
     unknownPrice: (productName) =>
       productName
-        ? `Кечираsiz, ${productName} бўйича амалдаги нарх тасдиқланмаган. Қанча миқдор керак эди?`
+        ? `Кечирасиз, ${productName} бўйича амалдаги нарх тасдиқланмаган. Қанча миқдор керак эди?`
         : 'Кечирасиз, ушбу маҳсулот бўйича амалдаги нарх тасдиқланмаган. Қанча миқдор керак эди?',
     unknownStock: (productName) =>
       productName
@@ -80,11 +80,11 @@ export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates>
     sampleUnverified: () =>
       'Кечирасиз, намуналар ва каталоглар мавжудлиги менежеримиз томонидан тасдиқланади. Тез орада боғланамиз.',
     managerHandoff: () =>
-      'Мурожаатингиз менежорга оширилди. Тез орада сиз билан боғланамиз.',
+      'Мурожаатингиз менежерларимизга юборилди. Тез орада сиз билан боғланамиз.\nМенежерлар гуруҳи: https://t.me/limaxmanagerlari1',
     securityBlocked: () =>
       'Кечирасиз, ушбу савол бўйича жавоб бера олмайман. Менежеримиз тез орада боғланади.',
     identityResponse: () =>
-      'Ман LImax AI ёрдамчисиман. Сизга B2B маҳсулотларимиз ва заказлар бўйича ёрдам бераман.',
+      'Мен LImax AI ёрдамчисиман. Сизга B2B маҳсулотларимиз ва заказлар бўйича ёрдам бераман.',
     actionNeutralFallback: () =>
       'Маълумот менежеримиз томонидан аниқлаштирилмоқда ва тез орада тақдим этилади.',
   },
@@ -110,7 +110,7 @@ export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates>
     sampleUnverified: () =>
       'К сожалению, наличие образцов и каталогов подтверждается менеджером. Мы скоро свяжемся с вами.',
     managerHandoff: () =>
-      'Ваше обращение передано менеджеру. Скоро мы с вами свяжемся.',
+      'Ваше обращение передано нашим менеджерам. Мы скоро свяжемся с вами.\nГруппа менеджеров: https://t.me/limaxmanagerlari1',
     securityBlocked: () =>
       'К сожалению, я не могу ответить на этот вопрос. Наш менеджер скоро свяжется с вами.',
     identityResponse: () =>

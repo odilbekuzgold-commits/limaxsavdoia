@@ -81,7 +81,7 @@ export function detectLanguage(text: string): SupportedLanguage {
   }
 
   // English indicators
-  if (/(hello|hi|price|cost|buy|order|catalog|product|how much)/i.test(lower) && !/(salom|rahmat|yuboring|narxi|ip)/i.test(lower)) {
+  if (/\b(hello|hi|price|cost|buy|order|catalog|product|how much)\b/i.test(lower) && !/(salom|rahmat|yuboring|narxi|ip)/i.test(lower)) {
     return 'en';
   }
 
@@ -325,3 +325,5 @@ export { AIOrchestrator } from './orchestrator.js';
 export * from './behavior.schema.js';
 export * from './localization/templates.js';
 export * from './prompts/index.js';
+export * from './templates/index.js';
+
