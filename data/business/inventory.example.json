@@ -1,0 +1,10 @@
+[
+  {
+    "productCode": "REPLACE_WITH_REAL_PRODUCT_CODE",
+    "availableQuantity": 1000.00,
+    "reservedQuantity": 100.00,
+    "unit": "kg",
+    "status": "IN_STOCK",
+    "warehouse": "Main Warehouse"
+  }
+]

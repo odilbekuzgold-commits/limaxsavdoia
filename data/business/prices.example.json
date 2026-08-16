@@ -1,0 +1,12 @@
+[
+  {
+    "productCode": "REPLACE_WITH_REAL_PRODUCT_CODE",
+    "amount": 100.00,
+    "currency": "USD",
+    "status": "ACTIVE",
+    "validFrom": "2026-01-01T00:00:00.000Z",
+    "minQuantity": 1,
+    "unit": "kg",
+    "notes": "REPLACE_WITH_REAL_NOTES"
+  }
+]

@@ -148,3 +148,5 @@ export async function runMigrations(customPool?: pg.Pool): Promise<void> {
 // Re-export repository layer
 export * from './repositories/index.js';
 export * from './importers/knowledge-import.js';
+export * from './importers/business-data.schema.js';
+export * from './importers/business-data-importer.js';

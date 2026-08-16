@@ -1,0 +1,11 @@
+[
+  {
+    "code": "REPLACE_WITH_REAL_PRODUCT_CODE",
+    "name": "REPLACE_WITH_REAL_PRODUCT_NAME",
+    "active": true,
+    "category": "REPLACE_WITH_REAL_CATEGORY",
+    "description": "REPLACE_WITH_REAL_DESCRIPTION",
+    "unit": "kg",
+    "aiRecommendable": true
+  }
+]
