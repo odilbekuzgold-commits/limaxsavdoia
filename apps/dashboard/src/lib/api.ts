@@ -22,14 +22,94 @@ function serverEnv(): Record<string, string> {
   return rootEnv;
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+function getApiConfig() {
   const env = serverEnv();
   const apiUrl = process.env.DASHBOARD_API_URL ?? env.DASHBOARD_API_URL ?? 'http://127.0.0.1:4000';
   const token = process.env.INTERNAL_API_TOKEN ?? env.INTERNAL_API_TOKEN;
+  return { apiUrl, token };
+}
+
+export async function apiGet<T>(path: string): Promise<T> {
+  const { apiUrl, token } = getApiConfig();
   const response = await fetch(`${apiUrl}${path}`, {
     headers: token ? { authorization: `Bearer ${token}` } : {},
     cache: 'no-store',
   });
   if (!response.ok) throw new Error(`API request failed (${response.status})`);
+  return response.json() as Promise<T>;
+}
+
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const { apiUrl, token } = getApiConfig();
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: 'POST',
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    let errorMsg = `API POST request failed (${response.status})`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error?.message) errorMsg = errJson.error.message;
+    } catch { /* parse fallback */ }
+    throw new Error(errorMsg);
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  const { apiUrl, token } = getApiConfig();
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: 'PATCH',
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    let errorMsg = `API PATCH request failed (${response.status})`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error?.message) errorMsg = errJson.error.message;
+    } catch { /* parse fallback */ }
+    throw new Error(errorMsg);
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const { apiUrl, token } = getApiConfig();
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: 'PUT',
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    let errorMsg = `API PUT request failed (${response.status})`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error?.message) errorMsg = errJson.error.message;
+    } catch { /* parse fallback */ }
+    throw new Error(errorMsg);
+  }
   return response.json() as Promise<T>;
 }

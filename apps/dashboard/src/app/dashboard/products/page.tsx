@@ -1,4 +1,33 @@
 import { apiGet } from '../../../lib/api';
-import { Empty, PageShell } from '../../../components/PageShell';
-type Product={id:string;name:string;code?:string;category?:string;active:boolean;aiRecommendable?:boolean};
-export default async function ProductsPage(){let items:Product[]=[];let error='';try{items=(await apiGet<{data:Product[]}>('/api/v1/products')).data}catch(e){error=e instanceof Error?e.message:'Yuklanmadi'}return <PageShell title="Mahsulotlar" description="AI ishlatadigan strukturali mahsulot katalogi.">{error&&<div className="data-error">{error}</div>}{items.length?<div className="table-wrap"><table><thead><tr><th>Kod</th><th>Nomi</th><th>Kategoriya</th><th>Status</th><th>AI</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td><b>{x.code??'—'}</b></td><td>{x.name}</td><td>{x.category??'—'}</td><td><span className="table-tag">{x.active?'ACTIVE':'INACTIVE'}</span></td><td>{x.aiRecommendable?'ENABLED':'DISABLED'}</td></tr>)}</tbody></table></div>:!error&&<Empty>Mahsulotlar PostgreSQL yoki API orqali qo‘shiladi.</Empty>}</PageShell>}
+import { PageShell } from '../../../components/PageShell';
+import { ProductsClientContainer, type ProductItem, type PriceRecord } from '../../../components/products/ProductsClientContainer';
+
+export default async function ProductsPage() {
+  let products: ProductItem[] = [];
+  const pricesMap: Record<string, PriceRecord[]> = {};
+  let error = '';
+
+  try {
+    const productsRes = await apiGet<{ data: ProductItem[] }>('/api/v1/products');
+    products = productsRes.data || [];
+
+    // Load price history for each product
+    for (const p of products) {
+      try {
+        const pricesRes = await apiGet<{ data: PriceRecord[] }>(`/api/v1/pricing?productId=${p.id}`);
+        pricesMap[p.id] = pricesRes.data || [];
+      } catch {
+        pricesMap[p.id] = [];
+      }
+    }
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Mahsulotlar katalogi yuklanmadi';
+  }
+
+  return (
+    <PageShell title="Mahsulotlar Katalogi & Narxlar" description="Mahsulotlar kiritish, tahrirlash, active status va amaldagi narxlarni boshqarish.">
+      {error && <div className="data-error">{error}</div>}
+      <ProductsClientContainer initialProducts={products} initialPrices={pricesMap} />
+    </PageShell>
+  );
+}
