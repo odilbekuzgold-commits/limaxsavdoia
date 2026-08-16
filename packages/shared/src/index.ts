@@ -24,6 +24,7 @@ export const MessageStatusEnum = z.enum([
   'READ',
   'FAILED',
   'CANCELLED',
+  'NOT_SENT',
 ]);
 export type MessageStatus = z.infer<typeof MessageStatusEnum>;
 
@@ -178,6 +179,7 @@ export const HandoffSchema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   status: z.enum(['PENDING', 'ACCEPTED', 'RESOLVED', 'REJECTED']).default('PENDING').optional(),
   notes: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
   assignedManagerId: z.string().uuid().optional(),
   assignedAt: z.date().optional(),
   acceptedAt: z.date().optional(),
@@ -471,5 +473,108 @@ export const AIUsageLogSchema = z.object({
   createdAt: z.date(),
 });
 export type AIUsageLog = z.infer<typeof AIUsageLogSchema>;
+
+// Dashboard Overview Types
+export interface DashboardLeadSummary {
+  totalLeads: number;
+  totalLeadsPrev: number | null;
+  totalLeadsChange: number | null;
+  qualifiedLeads: number;
+  qualifiedLeadsPrev: number | null;
+  qualifiedLeadsChange: number | null;
+  unqualifiedLeads: number;
+  unqualifiedLeadsPrev: number | null;
+  unqualifiedLeadsChange: number | null;
+  unknownLeads: number;
+  unknownLeadsPrev: number | null;
+  unknownLeadsChange: number | null;
+  aiProcessedLeads: number;
+  aiProcessedLeadsPrev: number | null;
+  aiProcessedLeadsChange: number | null;
+  managerRoutedLeads: number;
+  managerRoutedLeadsPrev: number | null;
+  managerRoutedLeadsChange: number | null;
+}
+
+export interface DashboardAiSummary {
+  aiProcessed: number;
+  managerRouted: number;
+  totalLeads: number;
+  aiPercent: number;
+  managerPercent: number;
+}
+
+export interface DashboardTopProduct {
+  rank: number;
+  name: string;
+  code?: string;
+  count: number;
+  percentage: number;
+}
+
+export interface DashboardTopManager {
+  id: string;
+  name: string;
+  totalLeads: number;
+  qualifiedLeads: number;
+  qualificationRate: number;
+  meetingsOrOrders: number;
+  conversionRate: number;
+}
+
+export type RecentLeadStatus =
+  | 'NEW'
+  | 'AI_PROCESSING'
+  | 'QUALIFIED'
+  | 'UNQUALIFIED'
+  | 'WAITING_MANAGER'
+  | 'CONTACTED'
+  | 'CONVERTED';
+
+export interface DashboardRecentLead {
+  id: string;
+  customerDisplayName: string;
+  sanitizedPhone: string;
+  requestedProduct: string;
+  channel: string;
+  status: RecentLeadStatus;
+  manager: string;
+  createdAt: string;
+}
+
+export interface DashboardCustomerSummary {
+  totalCustomers: number;
+  activeCustomers: number;
+  repeatInquiries: number;
+  conversionRate: number | null;
+}
+
+export interface DashboardResponseTime {
+  avgResponseSeconds: number | null;
+  formatted: string | null;
+  sampleSize: number;
+}
+
+export interface DashboardOverviewData {
+  period: {
+    startDate?: string;
+    endDate?: string;
+    range: string;
+  };
+  leadSummary: DashboardLeadSummary;
+  aiSummary: DashboardAiSummary;
+  topProducts: DashboardTopProduct[];
+  topManagers: DashboardTopManager[];
+  recentLeads: DashboardRecentLead[];
+  customerSummary: DashboardCustomerSummary;
+  responseTime: DashboardResponseTime;
+  samples: { count: number };
+  offers: { count: number };
+  meetings: { count: number };
+  meta: {
+    connected: boolean;
+    message: string;
+  } | null;
+}
 
 export * from './repositories.js';

@@ -183,7 +183,7 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
     );
   });
 
-  test('6. Dynamic runMigrations executes all 5 migrations (001-005)', async () => {
+  test('6. Dynamic runMigrations executes all 7 migrations (001–007)', async () => {
     const insertedMigrations: string[] = [];
 
     const mockClient = {
@@ -205,13 +205,15 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
 
     await runMigrations(mockPool);
 
-    assert.strictEqual(insertedMigrations.length, 5);
+    assert.strictEqual(insertedMigrations.length, 7);
     assert.deepStrictEqual(insertedMigrations, [
       '001_pgvector_extension',
       '002_business_core',
       '003_telegram_channel',
       '004_knowledge_rag',
       '005_business_data_management',
+      '006_handoff_delivery_metadata',
+      '007_handoff_schema_alignment',
     ]);
   });
 

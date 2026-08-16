@@ -87,6 +87,7 @@ export interface IHandoffRepository {
   findById(id: string): Promise<Handoff | null>;
   create(data: Omit<Handoff, 'id' | 'createdAt' | 'updatedAt'>): Promise<Handoff>;
   update(id: string, data: Partial<Handoff>): Promise<Handoff | null>;
+  claimManagerNotificationDelivery(id: string, timeoutMs?: number): Promise<boolean>;
 }
 
 export interface IProductRepository {

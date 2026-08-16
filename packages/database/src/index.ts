@@ -116,7 +116,17 @@ export async function runMigrations(customPool?: pg.Pool): Promise<void> {
       if (!executedNames.has(name)) {
         const filePath = path.join(migrationsDir, file);
         const sql = fs.readFileSync(filePath, 'utf-8');
-        await client.query(sql);
+        try {
+          await client.query('SAVEPOINT mig_sp');
+          await client.query(sql);
+          await client.query('RELEASE SAVEPOINT mig_sp');
+        } catch (migErr: unknown) {
+          await client.query('ROLLBACK TO SAVEPOINT mig_sp');
+          const msg = migErr instanceof Error ? migErr.message : String(migErr);
+          console.error(`[Database Migration Error] Migration ${name} failed: ${msg}`);
+          throw new Error(`Migration ${name} failed: ${msg}`);
+        }
+
         await client.query('INSERT INTO _migrations (name) VALUES ($1)', [
           name,
         ]);
