@@ -1,11 +1,3 @@
 import { apiGet } from '../../../../lib/api';
-
-export default async function SalesSettingsPage() {
-  let settings: Record<string, unknown> | null = null;
-  let error = '';
-  try { settings = (await apiGet<{ data: Record<string, unknown> }>('/api/v1/settings/sales')).data; }
-  catch (err) { error = err instanceof Error ? err.message : 'Sales settings could not be loaded'; }
-  return <main style={{ padding: 24, fontFamily: 'sans-serif' }}><h1>Sales & Delivery Settings</h1>
-    {error && <p role="alert" style={{ color: '#b42318' }}>{error}</p>}
-    {settings ? <dl>{Object.entries(settings).filter(([key]) => key !== 'id').map(([key, value]) => <div key={key} style={{ marginBottom: 12 }}><dt style={{ fontWeight: 700 }}>{key}</dt><dd>{Array.isArray(value) ? value.join(', ') : String(value ?? '—')}</dd></div>)}</dl> : !error && <p>No settings configured.</p>}</main>;
-}
+import { Empty, PageShell } from '../../../../components/PageShell';
+export default async function SettingsPage(){let data:Record<string,unknown>|null=null;let error='';try{data=(await apiGet<{data:Record<string,unknown>}>('/api/v1/settings/sales')).data}catch(e){error=e instanceof Error?e.message:'Yuklanmadi'}return <PageShell title="Savdo sozlamalari" description="Savdo, yetkazib berish va AI biznes qoidalari.">{error&&<div className="data-error">{error}</div>}{data?<div className="settings-grid">{Object.entries(data).filter(([k])=>k!=='id').map(([k,v])=><div key={k}><small>{k.replaceAll('_',' ')}</small><strong>{Array.isArray(v)?v.join(', '):String(v??'—')}</strong></div>)}</div>:!error&&<Empty>Savdo sozlamalari hali kiritilmagan.</Empty>}</PageShell>}

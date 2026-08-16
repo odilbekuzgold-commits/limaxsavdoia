@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
+import './globals.css';
+import './data.css';
 
 export const metadata: Metadata = {
   title: 'LImax AI Manager',
-  description: 'AI Sales Manager Dashboard',
+  description: 'LImax savdo, Telegram va AI boshqaruv markazi',
 };
 
 export default function RootLayout({

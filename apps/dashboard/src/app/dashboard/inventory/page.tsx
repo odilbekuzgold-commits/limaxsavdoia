@@ -1,15 +1,4 @@
 import { apiGet } from '../../../lib/api';
-
-type Inventory = { id: string; productId: string; status: string; availableQuantity: number; reservedQuantity: number; unit: string; warehouse?: string };
-
-export default async function InventoryPage() {
-  let items: Inventory[] = [];
-  let error = '';
-  try { items = (await apiGet<{ data: Inventory[] }>('/api/v1/inventory')).data; }
-  catch (err) { error = err instanceof Error ? err.message : 'Inventory could not be loaded'; }
-  return <main style={{ padding: 24, fontFamily: 'sans-serif' }}><h1>Inventory</h1>
-    {error && <p role="alert" style={{ color: '#b42318' }}>{error}</p>}
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr><th>Product ID</th><th>Status</th><th>Available</th><th>Reserved</th><th>Net</th><th>Warehouse</th></tr></thead>
-      <tbody>{items.map((i) => <tr key={i.id}><td>{i.productId}</td><td>{i.status}</td><td>{i.availableQuantity} {i.unit}</td><td>{i.reservedQuantity} {i.unit}</td><td>{i.availableQuantity - i.reservedQuantity} {i.unit}</td><td>{i.warehouse ?? '—'}</td></tr>)}</tbody></table>
-    {!error && items.length === 0 && <p>No inventory records yet.</p>}</main>;
-}
+import { Empty, PageShell } from '../../../components/PageShell';
+type Item={id:string;productId:string;status:string;availableQuantity:number;reservedQuantity:number;unit:string;warehouse?:string};
+export default async function InventoryPage(){let items:Item[]=[];let error='';try{items=(await apiGet<{data:Item[]}>('/api/v1/inventory')).data}catch(e){error=e instanceof Error?e.message:'Yuklanmadi'}return <PageShell title="Ombor" description="Real-time qoldiq, rezerv va mavjud miqdor.">{error&&<div className="data-error">{error}</div>}{items.length?<div className="table-wrap"><table><thead><tr><th>Mahsulot</th><th>Status</th><th>Mavjud</th><th>Rezerv</th><th>Sof qoldiq</th><th>Ombor</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.productId}</td><td><span className="table-tag">{x.status}</span></td><td>{x.availableQuantity} {x.unit}</td><td>{x.reservedQuantity} {x.unit}</td><td><b>{x.availableQuantity-x.reservedQuantity} {x.unit}</b></td><td>{x.warehouse??'—'}</td></tr>)}</tbody></table></div>:!error&&<Empty>Ombor qoldiqlari hali kiritilmagan.</Empty>}</PageShell>}

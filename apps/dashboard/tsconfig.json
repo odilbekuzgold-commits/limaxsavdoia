@@ -17,6 +17,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@limax/shared": [
+        "../../packages/shared/src/index.ts"
       ]
     },
     "allowJs": true,

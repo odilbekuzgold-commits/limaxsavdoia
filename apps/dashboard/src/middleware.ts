@@ -12,6 +12,7 @@ export function middleware(request: NextRequest) {
   const user = process.env.DASHBOARD_USER;
   const password = process.env.DASHBOARD_PASSWORD;
   if (!user || !password) {
+    if (process.env.NODE_ENV !== 'production') return NextResponse.next();
     return new NextResponse('Dashboard authentication is not configured', { status: 503 });
   }
   const header = request.headers.get('authorization');
