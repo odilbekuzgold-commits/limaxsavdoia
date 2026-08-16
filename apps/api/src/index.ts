@@ -67,6 +67,17 @@ app.get('/health/live', (req: Request, res: Response) => {
 
 app.get('/health/ready', async (req: Request, res: Response) => {
   const requestId = (req.headers['x-request-id'] as string) || '';
+  if (env.REPOSITORY_DRIVER === 'memory') {
+    return res.status(200).json({
+      status: 'ok',
+      services: {
+        memory: 'ok',
+      },
+      requestId,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   const [pgHealth, redisHealth, minioHealth] = await Promise.all([
     checkDatabaseHealth(3000),
     checkRedisHealth(3000),
@@ -102,6 +113,7 @@ import { createPricingRouter } from './modules/pricing.js';
 import { createCertificatesRouter } from './modules/certificates.js';
 import { createMediaRouter } from './modules/media.js';
 import { createSettingsRouter } from './modules/settings.js';
+import { createDashboardRouter } from './modules/dashboard.js';
 import { TelegramClient } from '@limax/channel-adapters';
 import {
   createTelegramWebhookRouter,
@@ -138,7 +150,11 @@ app.use('/api/v1', requireInternalApiToken(env.INTERNAL_API_TOKEN));
 // Telegram Integration Setup
 let telegramClient: TelegramClient | undefined;
 if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_BOT_TOKEN !== 'CHANGE_ME') {
-  telegramClient = new TelegramClient({ botToken: env.TELEGRAM_BOT_TOKEN });
+  telegramClient = new TelegramClient({
+    botToken: env.TELEGRAM_BOT_TOKEN,
+    // Must exceed Telegram's long-poll timeout and tolerate transient TLS/network delay.
+    timeoutMs: Math.max(30000, (env.TELEGRAM_POLL_TIMEOUT_SECONDS + 10) * 1000),
+  });
 }
 
 app.use('/api/v1/customers', createCustomersRouter(repos.customers));
@@ -151,6 +167,7 @@ app.use('/api/v1/pricing', createPricingRouter(repos));
 app.use('/api/v1/certificates', createCertificatesRouter(repos));
 app.use('/api/v1/media', createMediaRouter(repos));
 app.use('/api/v1/settings', createSettingsRouter(repos));
+app.use('/api/v1/dashboard', createDashboardRouter(repos));
 app.use(
   '/api/v1/webhooks/telegram',
   createTelegramWebhookRouter(

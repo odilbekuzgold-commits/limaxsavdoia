@@ -10,7 +10,8 @@ export class InMemoryMessageRepository implements IMessageRepository {
 
   async create(data: Omit<Message, 'id' | 'createdAt' | 'updatedAt'>): Promise<Message> {
     const now = new Date();
-    const message: Message = { ...data, id: randomUUID(), createdAt: now, updatedAt: now };
+    const createdAt = (data as any).createdAt ? new Date((data as any).createdAt) : now;
+    const message: Message = { ...data, id: randomUUID(), createdAt, updatedAt: now };
     this.db.push(message);
     return message;
   }

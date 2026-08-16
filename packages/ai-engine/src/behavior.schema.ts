@@ -70,8 +70,22 @@ export type BehaviorV2Config = z.infer<typeof BehaviorV2Schema>;
  * Throws explicit error on invalid or missing configuration (NO silent fallback).
  */
 export function loadBehaviorV2Config(filePath?: string): BehaviorV2Config {
-  const targetPath = filePath || path.join(process.cwd(), 'config', 'conversation', 'behavior.v2.json');
-  
+  let targetPath = filePath || path.join(process.cwd(), 'config', 'conversation', 'behavior.v2.json');
+
+  if (!filePath && !fs.existsSync(targetPath)) {
+    // Try resolving relative to workspace root when running from an app directory
+    const candidates = [
+      path.join(process.cwd(), '..', '..', 'config', 'conversation', 'behavior.v2.json'),
+      path.join(process.cwd(), '..', 'config', 'conversation', 'behavior.v2.json'),
+    ];
+    for (const cand of candidates) {
+      if (fs.existsSync(cand)) {
+        targetPath = cand;
+        break;
+      }
+    }
+  }
+
   if (!fs.existsSync(targetPath)) {
     throw new Error(`[BEHAVIOR V2 CONFIG FATAL] Behavior V2 configuration file not found at ${targetPath}`);
   }

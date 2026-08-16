@@ -14,6 +14,8 @@ import { MockAIProviderAdapter } from './providers/mock.provider.js';
 import { KnowledgeRetriever } from './rag/retriever.js';
 import { loadBehaviorV2Config, type BehaviorV2Config } from './behavior.schema.js';
 import { getLocalizedTemplate } from './localization/templates.js';
+import { TemplateQARouter } from './templates/router.js';
+
 
 export interface AIOrchestratorConfig {
   aiMode?: 'mock' | 'real';
@@ -171,6 +173,30 @@ export class AIOrchestrator {
         repos
       );
       return this.enforceActionHonesty(res, options?.actionExecuted, templates);
+    }
+
+    // 3.5. Template Q&A Router Stage (Dataset-based Router & Dynamic Lookup)
+    const templateRouter = new TemplateQARouter();
+    const templateResult = await templateRouter.routeQuery(prompt, context, {
+      repos,
+      actionExecuted: options?.actionExecuted,
+    });
+
+    if (templateResult && templateResult.confidence >= 0.70) {
+      const needsHandoff =
+        templateResult.needsHandoff ||
+        templateResult.confidence < this.confidenceThreshold;
+
+      if (needsHandoff) {
+        const res = await this.formatAndRecordHandoff(
+          { ...templateResult, needsHandoff: true },
+          context,
+          repos,
+          templateResult.intent === 'complaint' ? 'high' : 'medium'
+        );
+        return this.enforceActionHonesty(res, options?.actionExecuted, templates);
+      }
+      return this.enforceActionHonesty(templateResult, options?.actionExecuted, templates);
     }
 
     // 4. Structured Product & Business Data Source (Priority 1)

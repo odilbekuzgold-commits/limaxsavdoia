@@ -34,7 +34,9 @@ export class TelegramPollingRunner {
   async start(): Promise<void> {
     if (this.isRunning) return;
 
-    try {
+    let startupAttempt = 0;
+    while (!this.isRunning) {
+      try {
       // 1. Check getMe
       const me = await this.client.getMe();
       logger.info(`[Telegram Polling] Authenticated as bot @${me.username || me.first_name} (ID: ${me.id})`);
@@ -55,9 +57,17 @@ export class TelegramPollingRunner {
       this.pollLoop().catch((err) => {
         logger.error({ err }, '[Telegram Polling] Fatal error in polling loop');
       });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.error(`[Telegram Polling] Failed to initialize polling runner: ${msg}`);
+      return;
+      } catch (err: unknown) {
+        startupAttempt++;
+        const msg = err instanceof Error ? err.message : String(err);
+        const retryInMs = Math.min(1000 * Math.pow(2, startupAttempt), 30000);
+        logger.warn(
+          { startupAttempt, retryInMs },
+          `[Telegram Polling] Failed to initialize polling runner: ${msg}. Retrying...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, retryInMs));
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import type { Repositories } from '@limax/shared';
+import type { Repositories, Conversation } from '@limax/shared';
 import {
   type TelegramClient,
   TelegramUpdateSchema,
@@ -9,6 +9,7 @@ import {
 import {
   AIOrchestrator,
   detectLanguage,
+  getLocalizedTemplate,
 } from '@limax/ai-engine';
 
 const orchestrator = new AIOrchestrator();
@@ -28,6 +29,205 @@ export interface ProcessTelegramUpdateResult {
   reason?: string;
 }
 
+async function deliverHandoffNotifications(options: {
+  conv: Conversation;
+  customerId: string;
+  customerName: string;
+  detectedLang: string;
+  promptText: string;
+  ackText: string;
+  businessConnectionId?: string;
+  chatId: string;
+  senderId: string;
+  updateId: number;
+  repos: Repositories;
+  client?: TelegramClient;
+  managerChatId?: string;
+  handoffReason?: string;
+  intent?: string;
+}): Promise<{ ackSent: boolean; managerNotified: boolean }> {
+  const {
+    conv,
+    customerName,
+    detectedLang,
+    promptText,
+    ackText,
+    businessConnectionId,
+    chatId,
+    senderId,
+    repos,
+    client,
+    managerChatId,
+    handoffReason,
+    intent,
+  } = options;
+
+  // 1. Get or Create Active PENDING Handoff for this conversation
+  const convHandoffs = await repos.handoffs.findByConversationId(conv.id);
+  let activeHandoff = convHandoffs.find((h) => h.status === 'PENDING');
+
+  if (!activeHandoff) {
+    activeHandoff = await repos.handoffs.create({
+      conversationId: conv.id,
+      customerId: conv.customerId,
+      reason: handoffReason || 'CUSTOMER_REQUESTED_MANAGER',
+      status: 'PENDING',
+      priority: intent === 'complaint' ? 'high' : 'medium',
+      metadata: { managerNotificationStatus: 'PENDING' },
+    });
+  }
+
+  // 2. Customer Acknowledgment Delivery
+  const convMessages = await repos.messages.findByConversationId(conv.id);
+  const sentAckMsg = convMessages.find(
+    (m) =>
+      m.senderType === 'ai' &&
+      m.status === 'SENT' &&
+      (m.metadata as Record<string, unknown> | undefined)?.messageKind === 'handoff_ack'
+  );
+
+  let ackSent = Boolean(sentAckMsg);
+
+  if (!sentAckMsg) {
+    if (client) {
+      try {
+        const sentTelegramMsg = await sendTelegramTextMessage(client, {
+          businessConnectionId,
+          chatId,
+          text: ackText,
+          sendTyping: true,
+        });
+
+        await repos.messages.create({
+          conversationId: conv.id,
+          senderType: 'ai',
+          content: ackText,
+          contentType: 'text',
+          status: 'SENT',
+          metadata: {
+            messageKind: 'handoff_ack',
+            handoffId: activeHandoff.id,
+            telegramMessageId: String(sentTelegramMsg.message_id),
+          },
+        });
+        ackSent = true;
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error('[Handoff Delivery Error] Customer acknowledgment failed to send:', errMsg);
+        await repos.messages.create({
+          conversationId: conv.id,
+          senderType: 'ai',
+          content: ackText,
+          contentType: 'text',
+          status: 'FAILED',
+          metadata: {
+            messageKind: 'handoff_ack',
+            handoffId: activeHandoff.id,
+            error: errMsg,
+          },
+        });
+        ackSent = false;
+      }
+    } else {
+      // Test/Dev mode without client -> NOT_SENT
+      await repos.messages.create({
+        conversationId: conv.id,
+        senderType: 'ai',
+        content: ackText,
+        contentType: 'text',
+        status: 'NOT_SENT',
+        metadata: {
+          messageKind: 'handoff_ack',
+          handoffId: activeHandoff.id,
+        },
+      });
+      ackSent = false;
+    }
+  }
+
+  // 3. Manager Group Notification Delivery (Atomic DB-level & Memory idempotency)
+  const currentMeta = (activeHandoff.metadata || {}) as Record<string, unknown>;
+  const mgrStatus = currentMeta.managerNotificationStatus;
+
+  let managerNotified = mgrStatus === 'SENT';
+
+  if (!managerNotified) {
+    const claimed = await repos.handoffs.claimManagerNotificationDelivery(activeHandoff.id);
+    if (claimed) {
+      const targetManagerChatId = managerChatId || process.env.TELEGRAM_MANAGER_CHAT_ID;
+
+      if (targetManagerChatId && client) {
+        const channelLabel = businessConnectionId ? 'Telegram Business' : 'Telegram';
+        const truncatedPrompt = promptText.length > 300 ? `${promptText.slice(0, 300)}...` : promptText;
+        const priorityLabel = intent === 'complaint' ? 'HIGH' : 'MEDIUM';
+
+        const notificationText =
+          `🚨 Yangi handoff\n\n` +
+          `Mijoz: ${customerName}\n` +
+          `Telegram ID: ${senderId}\n` +
+          `Conversation ID: ${conv.id}\n` +
+          `Til: ${detectedLang}\n` +
+          `Sababi: ${handoffReason || activeHandoff.reason || 'AI Handoff Triggered'}\n` +
+          `Ustuvorlik: ${priorityLabel}\n` +
+          `Oxirgi xabar: ${truncatedPrompt}\n` +
+          `Kanal: ${channelLabel}\n` +
+          `Vaqt: ${new Date().toISOString()}`;
+
+        try {
+          await sendTelegramTextMessage(client, {
+            chatId: targetManagerChatId,
+            text: notificationText,
+          });
+
+          const latestHandoff = await repos.handoffs.findById(activeHandoff.id);
+          const latestMeta = (latestHandoff?.metadata || {}) as Record<string, unknown>;
+
+          await repos.handoffs.update(activeHandoff.id, {
+            metadata: {
+              ...latestMeta,
+              managerNotificationStatus: 'SENT',
+              managerNotificationSentAt: new Date().toISOString(),
+            },
+          });
+          managerNotified = true;
+        } catch (err: unknown) {
+          const rawErr = err instanceof Error ? err.message : String(err);
+          const sanitizedErr = rawErr.replace(/bot\d+:[A-Za-z0-9_-]+/g, 'bot***:***');
+          console.error('[Handoff Delivery Error] Manager notification failed to send:', sanitizedErr);
+
+          const latestHandoff = await repos.handoffs.findById(activeHandoff.id);
+          const latestMeta = (latestHandoff?.metadata || {}) as Record<string, unknown>;
+
+          await repos.handoffs.update(activeHandoff.id, {
+            metadata: {
+              ...latestMeta,
+              managerNotificationStatus: 'FAILED',
+              managerNotificationError: sanitizedErr,
+              managerNotificationFailedAt: new Date().toISOString(),
+            },
+          });
+          managerNotified = false;
+        }
+      } else if (!targetManagerChatId) {
+        console.warn('[Handoff Delivery Warning] TELEGRAM_MANAGER_CHAT_ID is missing or empty. Manager group notification skipped.');
+      } else if (!client) {
+        const latestHandoff = await repos.handoffs.findById(activeHandoff.id);
+        const latestMeta = (latestHandoff?.metadata || {}) as Record<string, unknown>;
+
+        await repos.handoffs.update(activeHandoff.id, {
+          metadata: {
+            ...latestMeta,
+            managerNotificationStatus: 'NOT_SENT',
+          },
+        });
+        managerNotified = false;
+      }
+    }
+  }
+
+  return { ackSent, managerNotified };
+}
+
 export async function processTelegramUpdate(
   options: ProcessTelegramUpdateOptions
 ): Promise<ProcessTelegramUpdateResult> {
@@ -41,7 +241,7 @@ export async function processTelegramUpdate(
   const update = parseResult.data as TelegramUpdate;
   const updateId = update.update_id;
 
-  // 2. Update Idempotency Check
+  // 2. Update Idempotency Check (Numeric update_id only - PostgreSQL BIGINT compatible)
   const existingReceipt = await repos.telegramReceipts.findByUpdateId(updateId);
   if (existingReceipt) {
     return { status: 'SKIPPED', updateId, reason: 'DUPLICATE_UPDATE_ID' };
@@ -159,16 +359,46 @@ export async function processTelegramUpdate(
     metadata: normalized.rawMetadata,
   });
 
-  // 9. State Check: If conversation is not AI_ACTIVE, AI does not reply automatically
+  // 9. State Check: If conversation is WAITING_MANAGER, retry any pending handoff delivery then suppress AI sales replies
   if (conv.status !== 'AI_ACTIVE') {
+    const convMessages = await repos.messages.findByConversationId(conv.id);
+    const hasSentAck = convMessages.some(
+      (m) =>
+        m.senderType === 'ai' &&
+        m.status === 'SENT' &&
+        (m.metadata as Record<string, unknown> | undefined)?.messageKind === 'handoff_ack'
+    );
+
+    const convHandoffs = await repos.handoffs.findByConversationId(conv.id);
+    const activeHandoff = convHandoffs.find((h) => h.status === 'PENDING');
+    const hasNotifiedManager =
+      (activeHandoff?.metadata as Record<string, unknown> | undefined)?.managerNotificationStatus === 'SENT';
+
+    if (!hasSentAck || !hasNotifiedManager) {
+      const ackText = getLocalizedTemplate(detectedLang).managerHandoff();
+      await deliverHandoffNotifications({
+        conv,
+        customerId,
+        customerName,
+        detectedLang,
+        promptText: normalized.text,
+        ackText,
+        businessConnectionId: normalized.businessConnectionId,
+        chatId: normalized.chatId,
+        senderId: normalized.senderId,
+        updateId,
+        repos,
+        client,
+        managerChatId,
+      });
+    }
+
     await repos.telegramReceipts.create({ updateId, updateType: 'message_saved_ai_inactive', status: 'PROCESSED' });
     return { status: 'PROCESSED', updateId, reason: `AI_INACTIVE_FOR_STATUS_${conv.status}` };
   }
 
   // 10. AI Response & Guardrail Processing via AIOrchestrator
   const convMessages = await repos.messages.findByConversationId(conv.id);
-  // isNewConversation = true only if this is the very first incoming message
-  // (convMessages contains only the one we just saved above, so length === 1)
   const isNewConversation = convMessages.filter((m) => m.senderType === 'customer').length <= 1;
   const aiContext = {
     conversationId: conv.id,
@@ -182,32 +412,51 @@ export async function processTelegramUpdate(
     })),
   };
 
-
   const orchestratorResult = await orchestrator.processQuery(normalized.text, aiContext, { repos });
 
-  // 11. Handoff Auto-Reply Suppression Check
-  if (orchestratorResult.suppressAutoReply) {
-    if (client && managerChatId) {
-      try {
-        await sendTelegramTextMessage(client, {
-          chatId: managerChatId,
-          text: `🚨 MANAGER HANDOFF REQUIRED\n\nCustomer: ${customerName}\nLanguage: ${detectedLang}\nReason: ${orchestratorResult.handoffReason || 'AI Handoff Triggered'}`,
-        });
-      } catch {
-        // Non-critical manager notification failure
-      }
-    }
-    await repos.conversations.update(conv.id, { lastMessageAt: new Date() });
-    await repos.telegramReceipts.create({ updateId, updateType: 'handoff_suppressed', status: 'PROCESSED' });
+  // 11. Handoff Delivery Check: Customer Localized Acknowledgment & Manager Group Notification
+  if (orchestratorResult.suppressAutoReply || orchestratorResult.needsHandoff) {
+    const ackText = orchestratorResult.replyText;
+
+    // Update conversation status to WAITING_MANAGER
+    await repos.conversations.update(conv.id, {
+      status: 'WAITING_MANAGER',
+      lastMessageAt: new Date(),
+    });
+
+    const { ackSent } = await deliverHandoffNotifications({
+      conv,
+      customerId,
+      customerName,
+      detectedLang,
+      promptText: normalized.text,
+      ackText,
+      businessConnectionId: normalized.businessConnectionId,
+      chatId: normalized.chatId,
+      senderId: normalized.senderId,
+      updateId,
+      repos,
+      client,
+      managerChatId,
+      handoffReason: orchestratorResult.handoffReason,
+      intent: orchestratorResult.intent,
+    });
+
+    await repos.telegramReceipts.create({
+      updateId,
+      updateType: 'handoff_delivered',
+      status: ackSent ? 'PROCESSED' : 'FAILED',
+    });
+
     return {
       status: 'PROCESSED',
       updateId,
       updateType: 'message',
-      reason: 'SUPPRESSED_FOR_HANDOFF',
+      reason: 'HANDOFF_DELIVERED',
     };
   }
 
-  // 11. Send Outgoing Reply via Telegram Client (if client available)
+  // 12. Send Standard Outgoing Reply via Telegram Client
   const replyText = orchestratorResult.replyText;
 
   // Duplicate Reply Prevention: If the bot already sent the exact same reply in the last 2 minutes, suppress duplicate reply
@@ -220,7 +469,6 @@ export async function processTelegramUpdate(
 
   if (client) {
     try {
-      // Natural human response delay (simulates real manager typing time)
       if (process.env.RESPONSE_DELAY_ENABLED !== 'false' && process.env.NODE_ENV !== 'test') {
         const minMs = parseInt(process.env.RESPONSE_DELAY_MIN_MS || '2000', 10);
         const maxMs = parseInt(process.env.RESPONSE_DELAY_MAX_MS || '6000', 10);
@@ -260,13 +508,13 @@ export async function processTelegramUpdate(
       });
     }
   } else {
-    // Development / Test mode without client
+    // Development / Test mode without client -> NOT_SENT
     await repos.messages.create({
       conversationId: conv.id,
       senderType: 'ai',
       content: replyText,
       contentType: 'text',
-      status: 'SENT',
+      status: 'NOT_SENT',
     });
   }
 
