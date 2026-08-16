@@ -139,7 +139,7 @@ describe('Stage 6: Dashboard Business Data Management Tests', () => {
     assert.strictEqual(active.price, 3.20);
   });
 
-  test('5. Overlapping active price rejection validation', async () => {
+  test('5. Creating a new active price deactivates prior active price and preserves history', async () => {
     const repos = createRepositories('memory');
     const prod = await repos.products.create({ name: 'Yarn A', category: 'Cat', description: 'D', price: 1 });
 
@@ -152,17 +152,21 @@ describe('Stage 6: Dashboard Business Data Management Tests', () => {
       active: true,
     });
 
-    // Attempting to create another overlapping active price for same currency & unit must throw error
-    await assert.rejects(async () => {
-      await createProductPrice(repos, {
-        productId: prod.id,
-        price: 2.2,
-        currency: 'USD',
-        unit: 'kg',
-        validFrom: new Date(),
-        active: true,
-      });
-    }, /Overlapping active price already exists/);
+    const p2 = await createProductPrice(repos, {
+      productId: prod.id,
+      price: 2.2,
+      currency: 'USD',
+      unit: 'kg',
+      validFrom: new Date(),
+      active: true,
+    });
+
+    const activePrice = await repos.productPrices.findActiveByProductId(prod.id);
+    assert.strictEqual(activePrice?.id, p2.id);
+    assert.strictEqual(activePrice?.price, 2.2);
+
+    const allPrices = await repos.productPrices.findByProductId(prod.id);
+    assert.strictEqual(allPrices.length, 2);
   });
 
   test('6. Inactive price ignored by findActiveByProductId', async () => {

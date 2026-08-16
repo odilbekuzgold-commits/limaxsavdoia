@@ -14,11 +14,12 @@
     "test:integration:postgres": "node --test tests/integration/pg_handoff_delivery_persistence.test.ts tests/integration/pg_stage14_business_crud.test.ts"
   },
   "devDependencies": {
-    "turbo": "^2.3.3",
-    "typescript": "^5.5.4",
-    "eslint": "^9.8.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "prettier": "^3.3.3"
+    "eslint": "^9.8.0",
+    "playwright": "^1.62.1",
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.3",
+    "typescript": "^5.5.4"
   }
 }

@@ -33,7 +33,7 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
   const [availableQty, setAvailableQty] = useState('0');
   const [reservedQty, setReservedQty] = useState('0');
   const [unit, setUnit] = useState('kg');
-  const [warehouse, setWarehouse] = useState('Main Warehouse');
+  const [warehouse, setWarehouse] = useState('');
   const [status, setStatus] = useState('IN_STOCK');
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
     setAvailableQty(inv ? String(inv.availableQuantity) : '0');
     setReservedQty(inv ? String(inv.reservedQuantity) : '0');
     setUnit(inv ? inv.unit : 'kg');
-    setWarehouse(inv ? inv.warehouse || 'Main Warehouse' : 'Main Warehouse');
+    setWarehouse(inv ? inv.warehouse || '' : '');
     setStatus(inv ? inv.status : 'IN_STOCK');
   };
 
@@ -69,13 +69,15 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
       return;
     }
 
+    const derivedStatus = avail === 0 || (avail - res) <= 0 ? 'OUT_OF_STOCK' : status;
+
     startTransition(async () => {
       const resp = await updateInventoryAction(editingItem.product.id, {
         availableQuantity: avail,
         reservedQuantity: res,
         unit,
-        warehouse,
-        status: avail === 0 ? 'OUT_OF_STOCK' : status,
+        warehouse: warehouse.trim() || undefined,
+        status: derivedStatus,
         expectedVersion: editingItem.inv?.version,
       });
 
@@ -141,7 +143,7 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
                 const avail = inv ? inv.availableQuantity : 0;
                 const resQty = inv ? inv.reservedQuantity : 0;
                 const net = netAvailable(avail, resQty);
-                const invStatus = inv ? inv.status : 'UNKNOWN';
+                const invStatus = !inv ? 'UNKNOWN' : (avail === 0 || net <= 0 ? 'OUT_OF_STOCK' : inv.status);
 
                 return (
                   <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -156,9 +158,9 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
                           fontSize: '12px',
                           fontWeight: 600,
                           backgroundColor:
-                            invStatus === 'IN_STOCK' ? '#dcfce7' : invStatus === 'LOW_STOCK' ? '#fef9c3' : '#f1f5f9',
+                            invStatus === 'IN_STOCK' ? '#dcfce7' : invStatus === 'LOW_STOCK' ? '#fef9c3' : invStatus === 'OUT_OF_STOCK' ? '#fee2e2' : '#f1f5f9',
                           color:
-                            invStatus === 'IN_STOCK' ? '#166534' : invStatus === 'LOW_STOCK' ? '#854d0e' : '#64748b',
+                            invStatus === 'IN_STOCK' ? '#166534' : invStatus === 'LOW_STOCK' ? '#854d0e' : invStatus === 'OUT_OF_STOCK' ? '#991b1b' : '#64748b',
                         }}
                       >
                         {invStatus}
@@ -169,7 +171,7 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
                     <td style={{ padding: '12px', fontWeight: 600, color: net > 0 ? '#166534' : '#991b1b' }}>
                       {inv ? `${net} ${inv.unit}` : 'UNKNOWN'}
                     </td>
-                    <td style={{ padding: '12px', color: '#64748b' }}>{inv?.warehouse || 'Main Warehouse'}</td>
+                    <td style={{ padding: '12px', color: '#64748b' }}>{inv?.warehouse || '—'}</td>
                     <td style={{ padding: '12px', color: '#94a3b8', fontSize: '12px' }}>
                       {inv?.updatedAt ? new Date(inv.updatedAt).toLocaleString() : '—'}
                     </td>
@@ -203,33 +205,25 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600 }}>Rezerv Miqdori (Reserved) *</label>
               <input type="number" step="0.01" value={reservedQty} onChange={(e) => setReservedQty(e.target.value)} required style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
-              <small style={{ color: '#64748b' }}>
-                Sof qoldiq: <strong>{netAvailable(parseFloat(availableQty) || 0, parseFloat(reservedQty) || 0)} {unit}</strong>
-              </small>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600 }}>O‘lchov birligi</label>
-              <input type="text" value={unit} onChange={(e) => setUnit(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600 }}>O‘lchov Birligi (Unit) *</label>
+              <input type="text" value={unit} onChange={(e) => setUnit(e.target.value)} required style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600 }}>Ombor Nomi</label>
-              <input type="text" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600 }}>Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}>
-                <option value="IN_STOCK">IN_STOCK (Omborda bor)</option>
-                <option value="LOW_STOCK">LOW_STOCK (Kam qoldi)</option>
-                <option value="OUT_OF_STOCK">OUT_OF_STOCK (Qolmagan)</option>
-              </select>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600 }}>Ombor Nomi (Warehouse)</label>
+              <input type="text" value={warehouse} onChange={(e) => setWarehouse(e.target.value)} placeholder="Masalan: Toshkent Bosh Ombor" style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }} />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-              <button type="button" onClick={() => setEditingItem(null)} style={{ padding: '8px 16px', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Bekor qilish</button>
-              <button type="submit" disabled={isPending} style={{ padding: '8px 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Saqlash</button>
+              <button type="button" onClick={() => setEditingItem(null)} style={{ padding: '8px 16px', background: '#e2e8f0', color: '#334155', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                Bekor qilish
+              </button>
+              <button type="submit" disabled={isPending} style={{ padding: '8px 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                {isPending ? 'Saqlanmoqda...' : 'Saqlash'}
+              </button>
             </div>
           </form>
         </div>

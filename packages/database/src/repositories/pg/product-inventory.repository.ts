@@ -33,15 +33,23 @@ export class PgProductInventoryRepository implements IProductInventoryRepository
       throw err;
     }
 
+    const avail = data.availableQuantity !== undefined ? data.availableQuantity : existing?.availableQuantity ?? 0;
+    const resQty = data.reservedQuantity !== undefined ? data.reservedQuantity : existing?.reservedQuantity ?? 0;
+    const netAvailable = avail - resQty;
+
+    // Derived status truth: zero available or net-zero/negative net available MUST be OUT_OF_STOCK
+    const derivedStatus = avail <= 0 || netAvailable <= 0 ? 'OUT_OF_STOCK' : (data.status || existing?.status || 'IN_STOCK');
+    const wh = data.warehouse !== undefined ? data.warehouse : (existing?.warehouse ?? '');
+
     if (existing) {
       const expectedVer = data.expectedVersion ?? existing.version;
       const result = await this.pool.query<Record<string, unknown>>(
         `UPDATE product_inventory SET
-           status = COALESCE($2, product_inventory.status),
-           available_quantity = COALESCE($3, product_inventory.available_quantity),
-           reserved_quantity = COALESCE($4, product_inventory.reserved_quantity),
+           status = $2,
+           available_quantity = $3,
+           reserved_quantity = $4,
            unit = COALESCE($5, product_inventory.unit),
-           warehouse = COALESCE($6, product_inventory.warehouse),
+           warehouse = $6,
            updated_by = COALESCE($7, product_inventory.updated_by),
            version = product_inventory.version + 1,
            updated_at = NOW()
@@ -49,11 +57,11 @@ export class PgProductInventoryRepository implements IProductInventoryRepository
          RETURNING id, product_id, status, available_quantity, reserved_quantity, unit, warehouse, updated_by, version, updated_at`,
         [
           productId,
-          data.status || null,
-          data.availableQuantity ?? null,
-          data.reservedQuantity ?? null,
+          derivedStatus,
+          avail,
+          resQty,
           data.unit || null,
-          data.warehouse || null,
+          wh,
           data.updatedBy || null,
           expectedVer,
         ]
@@ -74,11 +82,11 @@ export class PgProductInventoryRepository implements IProductInventoryRepository
          RETURNING id, product_id, status, available_quantity, reserved_quantity, unit, warehouse, updated_by, version, updated_at`,
         [
           productId,
-          data.status || 'IN_STOCK',
-          data.availableQuantity ?? 0,
-          data.reservedQuantity ?? 0,
+          derivedStatus,
+          avail,
+          resQty,
           data.unit || 'kg',
-          data.warehouse || 'Main Warehouse',
+          wh,
           data.updatedBy || null,
         ]
       );
@@ -87,6 +95,7 @@ export class PgProductInventoryRepository implements IProductInventoryRepository
   }
 
   private mapRow(row: Record<string, unknown>): ProductInventory {
+    const whVal = row.warehouse as string;
     return {
       id: row.id as string,
       productId: row.product_id as string,
@@ -94,8 +103,8 @@ export class PgProductInventoryRepository implements IProductInventoryRepository
       availableQuantity: parseFloat(row.available_quantity as string),
       reservedQuantity: parseFloat(row.reserved_quantity as string),
       unit: row.unit as string,
-      warehouse: row.warehouse as string,
-      updatedBy: row.updated_by as string | undefined,
+      warehouse: whVal ? whVal : undefined,
+      updatedBy: (row.updated_by as string) || undefined,
       version: typeof row.version === 'number' ? row.version : parseInt(String(row.version || 1), 10),
       updatedAt: new Date(row.updated_at as string),
     };

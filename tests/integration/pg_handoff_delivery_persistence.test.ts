@@ -45,19 +45,22 @@ describe('Stage 10.1: PostgreSQL Handoff Delivery Persistence Integration Tests'
       assert.fail(`Database name "${dbName}" rejected. Must be limax_test or start with limax_test_ to protect production/dev databases.`);
     }
 
-    // 3. Check PostgreSQL connection
-    const pool = new pg.Pool({
-      connectionString: TEST_DB_URL,
-      connectionTimeoutMillis: 2000,
-    });
-
+    // 3. Check PostgreSQL connection & ensure database exists
+    const adminUrl = `${parsedUrl.protocol}//${parsedUrl.username}:${parsedUrl.password}@${parsedUrl.hostname}:${parsedUrl.port || '5432'}/postgres`;
     let isPgAvailable = false;
     try {
-      await pool.query('SELECT 1');
+      const adminPool = new pg.Pool({ connectionString: adminUrl, connectionTimeoutMillis: 2000 });
+      const checkRes = await adminPool.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
+      if (checkRes.rows.length === 0) {
+        await adminPool.query(`CREATE DATABASE "${dbName}"`);
+      }
+      await adminPool.end();
       isPgAvailable = true;
     } catch {
       isPgAvailable = false;
     }
+
+    const pool = new pg.Pool({ connectionString: TEST_DB_URL });
 
     if (!isPgAvailable) {
       console.log(`\n[Stage 10.1 PostgreSQL Test] NOT RUN (No local PostgreSQL database connection available on localhost:5432 / ${dbName})\n`);

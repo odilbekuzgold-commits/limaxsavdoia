@@ -90,9 +90,10 @@ export function createProductsRouter(
       res.status(201).json({ data: product });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const code = (err as unknown as { statusCode?: number }).statusCode;
-      if (code === 409 || msg.includes('already exists')) {
-        res.status(409).json({ error: { code: 'DUPLICATE_CODE', message: msg } });
+      const statusCode = (err as unknown as { statusCode?: number; code?: string }).statusCode;
+      const pgCode = (err as unknown as { code?: string }).code;
+      if (statusCode === 409 || pgCode === '23505' || msg.includes('already exists') || msg.includes('23505') || msg.includes('uq_products_code_lower')) {
+        res.status(409).json({ error: { code: 'DUPLICATE_PRODUCT_CODE', message: 'Product code already exists' } });
         return;
       }
       next(err);

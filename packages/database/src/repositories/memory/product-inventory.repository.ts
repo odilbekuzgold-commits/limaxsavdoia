@@ -29,6 +29,7 @@ export class InMemoryProductInventoryRepository implements IProductInventoryRepo
 
     const avail = data.availableQuantity !== undefined ? data.availableQuantity : existing?.availableQuantity ?? 0;
     const res = data.reservedQuantity !== undefined ? data.reservedQuantity : existing?.reservedQuantity ?? 0;
+    const netAvailable = avail - res;
 
     if (avail < 0) {
       throw new Error('availableQuantity must be >= 0');
@@ -40,16 +41,17 @@ export class InMemoryProductInventoryRepository implements IProductInventoryRepo
       throw new Error('reservedQuantity cannot exceed availableQuantity');
     }
 
+    const derivedStatus = avail <= 0 || netAvailable <= 0 ? 'OUT_OF_STOCK' : (data.status || existing?.status || 'IN_STOCK');
     const newVersion = existing ? (existing.version || 1) + 1 : 1;
 
     const item: ProductInventory = {
       id: existing?.id || randomUUID(),
       productId,
-      status: data.status || existing?.status || 'IN_STOCK',
+      status: derivedStatus,
       availableQuantity: avail,
       reservedQuantity: res,
       unit: data.unit || existing?.unit || 'kg',
-      warehouse: data.warehouse || existing?.warehouse || 'Main Warehouse',
+      warehouse: data.warehouse !== undefined ? data.warehouse : existing?.warehouse,
       updatedBy: data.updatedBy || existing?.updatedBy,
       version: newVersion,
       updatedAt: now,

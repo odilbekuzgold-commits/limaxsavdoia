@@ -262,7 +262,7 @@ export const ProductInventorySchema = z.object({
   availableQuantity: z.number().gte(0, 'availableQuantity must be >= 0').default(0),
   reservedQuantity: z.number().gte(0, 'reservedQuantity must be >= 0').default(0),
   unit: z.string().default('kg'),
-  warehouse: z.string().default('Main Warehouse'),
+  warehouse: z.string().optional(),
   updatedBy: z.string().optional(),
   version: z.number().int().min(1).default(1),
   updatedAt: z.date(),

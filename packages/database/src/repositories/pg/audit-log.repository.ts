@@ -18,7 +18,7 @@ export class PgAuditLogRepository implements IAuditLogRepository {
         data.userId,
         data.userRole,
         data.action,
-        data.entity,
+        (data as unknown as { entityType?: string; entity?: string }).entityType || (data as unknown as { entityType?: string; entity?: string }).entity || 'products',
         data.entityId || null,
         data.details ? JSON.stringify(data.details) : null,
       ]
@@ -26,8 +26,10 @@ export class PgAuditLogRepository implements IAuditLogRepository {
     return this.mapRow(result.rows[0]);
   }
 
-  async findAll(params: { page: number; limit: number; entity?: string }): Promise<PaginatedResult<AuditLog>> {
-    const { page, limit, entity } = params;
+  async findAll(params: { page?: number; limit?: number; entity?: string }): Promise<PaginatedResult<AuditLog>> {
+    const page = params.page || 1;
+    const limit = params.limit || 50;
+    const { entity } = params;
     const offset = (page - 1) * limit;
     const values: unknown[] = [];
     let where = '';

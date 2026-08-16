@@ -135,7 +135,12 @@ export function createPricingRouter(
       res.status(201).json({ data: created });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const code = (err as unknown as { statusCode?: number }).statusCode;
+      const code = (err as unknown as { statusCode?: number; code?: string }).statusCode;
+      const pgCode = (err as unknown as { code?: string }).code;
+      if (pgCode === '23505' || msg.includes('23505') || msg.includes('uq_product_prices_single_active')) {
+        res.status(409).json({ error: { code: 'DUPLICATE_ACTIVE_PRICE', message: 'An active price already exists for this product' } });
+        return;
+      }
       if (code === 404 || msg.includes('Product not found')) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Product not found' } });
         return;

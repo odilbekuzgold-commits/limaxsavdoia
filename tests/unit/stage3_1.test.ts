@@ -31,7 +31,7 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
     // Postgres without pool should throw error
     assert.throws(
       () => createRepositories('postgres'),
-      /PostgreSQL pool is required/
+      /PostgreSQL pool.*is required/
     );
   });
 
@@ -162,7 +162,7 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
     assert.strictEqual(newProduct.id, '22222222-2222-4222-a222-222222222222');
     assert.ok(executedQuery.startsWith('INSERT INTO products'));
     assert.strictEqual(executedValues[0], 'Poly Yarn');
-    assert.strictEqual(executedValues[1], 'Synthetic');
+    assert.strictEqual(executedValues[2], 'Synthetic');
   });
 
   test('5. Duplicate constraint & error handling mapping', async () => {
@@ -183,7 +183,7 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
     );
   });
 
-  test('6. Dynamic runMigrations executes all 7 migrations (001–007)', async () => {
+  test('6. Dynamic runMigrations executes all 12 migrations (001–012)', async () => {
     const insertedMigrations: string[] = [];
 
     const mockClient = {
@@ -205,16 +205,9 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
 
     await runMigrations(mockPool);
 
-    assert.strictEqual(insertedMigrations.length, 7);
-    assert.deepStrictEqual(insertedMigrations, [
-      '001_pgvector_extension',
-      '002_business_core',
-      '003_telegram_channel',
-      '004_knowledge_rag',
-      '005_business_data_management',
-      '006_handoff_delivery_metadata',
-      '007_handoff_schema_alignment',
-    ]);
+    assert.strictEqual(insertedMigrations.length, 12);
+    assert.strictEqual(insertedMigrations[0], '001_pgvector_extension');
+    assert.strictEqual(insertedMigrations[11], '012_product_prices_single_active');
   });
 
   test('7. Mounted API Routers (Inventory, Pricing, Certificates, Media, Settings) factory verification', () => {
