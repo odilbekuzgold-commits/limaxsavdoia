@@ -1,0 +1,65 @@
+[
+  {
+    "variant": "necpul",
+    "normalized_form": "narxi qancha",
+    "meaning": "narx so‘rovi",
+    "intent_hint": "PRICE",
+    "frequency": 3
+  },
+  {
+    "variant": "narxchi",
+    "normalized_form": "narxi qancha",
+    "meaning": "narx so‘rovi",
+    "intent_hint": "PRICE",
+    "frequency": 1
+  },
+  {
+    "variant": "bomi",
+    "normalized_form": "bormi",
+    "meaning": "mavjudlik so‘rovi",
+    "intent_hint": "STOCK_AVAILABILITY",
+    "frequency": 1
+  },
+  {
+    "variant": "babina",
+    "normalized_form": "bobina",
+    "meaning": "bobina",
+    "intent_hint": "BOBINA_INFO",
+    "frequency": 25
+  },
+  {
+    "variant": "spes",
+    "normalized_form": "spetsifikatsiya",
+    "meaning": "spetsifikatsiya",
+    "intent_hint": "SPECIFICATION_DOCUMENT",
+    "frequency": 3
+  },
+  {
+    "variant": "zakaz",
+    "normalized_form": "buyurtma",
+    "meaning": "buyurtma",
+    "intent_hint": "ORDER_CREATE",
+    "frequency": 12
+  },
+  {
+    "variant": "sklad",
+    "normalized_form": "ombor",
+    "meaning": "ombor",
+    "intent_hint": "STOCK_AVAILABILITY",
+    "frequency": 1
+  },
+  {
+    "variant": "obrazets",
+    "normalized_form": "namuna",
+    "meaning": "namuna",
+    "intent_hint": "SAMPLE",
+    "frequency": 3
+  },
+  {
+    "variant": "moshina",
+    "normalized_form": "mashina",
+    "meaning": "transport",
+    "intent_hint": "PICKUP",
+    "frequency": 11
+  }
+]
