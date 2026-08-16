@@ -20,6 +20,13 @@ export class InMemoryProductInventoryRepository implements IProductInventoryRepo
     const existing = this.db.get(productId);
     const now = new Date();
 
+    if (existing && data.expectedVersion !== undefined && existing.version !== data.expectedVersion) {
+      const err = new Error(`Inventory version conflict: expected version ${data.expectedVersion}, but found ${existing.version}`);
+      (err as unknown as { statusCode: number; code: string }).statusCode = 409;
+      (err as unknown as { statusCode: number; code: string }).code = 'INVENTORY_VERSION_CONFLICT';
+      throw err;
+    }
+
     const avail = data.availableQuantity !== undefined ? data.availableQuantity : existing?.availableQuantity ?? 0;
     const res = data.reservedQuantity !== undefined ? data.reservedQuantity : existing?.reservedQuantity ?? 0;
 
@@ -33,6 +40,8 @@ export class InMemoryProductInventoryRepository implements IProductInventoryRepo
       throw new Error('reservedQuantity cannot exceed availableQuantity');
     }
 
+    const newVersion = existing ? (existing.version || 1) + 1 : 1;
+
     const item: ProductInventory = {
       id: existing?.id || randomUUID(),
       productId,
@@ -42,6 +51,7 @@ export class InMemoryProductInventoryRepository implements IProductInventoryRepo
       unit: data.unit || existing?.unit || 'kg',
       warehouse: data.warehouse || existing?.warehouse || 'Main Warehouse',
       updatedBy: data.updatedBy || existing?.updatedBy,
+      version: newVersion,
       updatedAt: now,
     };
 

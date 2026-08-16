@@ -7,7 +7,7 @@ import type {
 } from '@limax/shared';
 
 export class PgAuditLogRepository implements IAuditLogRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async create(data: CreateAuditLog): Promise<AuditLog> {
     const result = await this.pool.query<Record<string, unknown>>(

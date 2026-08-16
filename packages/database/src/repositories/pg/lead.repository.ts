@@ -6,7 +6,7 @@ import type {
 } from '@limax/shared';
 
 export class PgLeadRepository implements ILeadRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findAll(params: { temperature?: LeadTemperature; stage?: string }): Promise<Lead[]> {
     const { temperature, stage } = params;

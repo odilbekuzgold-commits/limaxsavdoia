@@ -264,6 +264,7 @@ export const ProductInventorySchema = z.object({
   unit: z.string().default('kg'),
   warehouse: z.string().default('Main Warehouse'),
   updatedBy: z.string().optional(),
+  version: z.number().int().min(1).default(1),
   updatedAt: z.date(),
 }).refine((data) => data.reservedQuantity <= data.availableQuantity, {
   message: 'reservedQuantity cannot exceed availableQuantity',
@@ -278,6 +279,7 @@ export const UpdateProductInventorySchema = z.object({
   unit: z.string().optional(),
   warehouse: z.string().optional(),
   updatedBy: z.string().optional(),
+  expectedVersion: z.number().int().min(1).optional(),
 });
 export type UpdateProductInventory = z.infer<typeof UpdateProductInventorySchema>;
 

@@ -8,7 +8,7 @@ import type {
 } from '@limax/shared';
 
 export class PgKnowledgeRepository implements IKnowledgeRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findAll(params: { language?: SupportedLanguage; status?: KnowledgeStatus }): Promise<KnowledgeItem[]> {
     const { language, status } = params;

@@ -5,7 +5,7 @@ import type {
 } from '@limax/shared';
 
 export class PgHandoffRepository implements IHandoffRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   private selectCols =
     'id, conversation_id, customer_id, reason, priority, status, notes, metadata, assigned_manager_id, assigned_at, accepted_at, resolved_at, created_at, updated_at';

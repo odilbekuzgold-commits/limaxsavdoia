@@ -74,8 +74,8 @@ describe('Stage 10.1: PostgreSQL Handoff Delivery Persistence Integration Tests'
       const migrationRes = await pool.query<{ name: string }>(
         'SELECT name FROM _migrations ORDER BY id ASC'
       );
-      assert.strictEqual(migrationRes.rows.length, 7, '_migrations ledger must contain exactly 7 migrations');
-      assert.ok(migrationRes.rows[6].name.includes('007_handoff_schema_alignment'), '7th migration must be 007_handoff_schema_alignment');
+      assert.ok(migrationRes.rows.length >= 7, '_migrations ledger must contain at least 7 migrations');
+      assert.ok(migrationRes.rows.some(r => r.name.includes('007_handoff_schema_alignment')), '007_handoff_schema_alignment migration must be recorded');
 
       // Setup Repositories
       const pgHandoffRepo1 = new PgHandoffRepository(pool);

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { Repositories, ProductInventory, UpdateProductInventory, UserRole } from '@limax/shared';
 import { UpdateProductInventorySchema } from '@limax/shared';
+import { withTransaction, type RepositoryDriver } from '@limax/database';
 import { checkPermission } from '../common/middleware/rbac.js';
 import { logAudit } from '../common/middleware/audit.js';
 
@@ -21,52 +22,63 @@ export async function updateProductInventory(
   productId: string,
   data: unknown,
   userId: string = 'dashboard-admin',
-  userRole: UserRole = 'ADMIN'
+  userRole: UserRole = 'ADMIN',
+  driver: RepositoryDriver = 'memory',
+  pool?: any
 ): Promise<ProductInventory> {
   checkPermission(userRole, 'inventory.update');
 
-  const raw = (data || {}) as Record<string, unknown>;
-  const availableQuantity = typeof raw.availableQuantity === 'number' ? raw.availableQuantity : 0;
-  const reservedQuantity = typeof raw.reservedQuantity === 'number' ? raw.reservedQuantity : 0;
+  return withTransaction(driver, pool, repos, async (txRepos) => {
+    const raw = (data || {}) as Record<string, unknown>;
+    const availableQuantity = typeof raw.availableQuantity === 'number' ? raw.availableQuantity : 0;
+    const reservedQuantity = typeof raw.reservedQuantity === 'number' ? raw.reservedQuantity : 0;
+    const expectedVersion = typeof raw.expectedVersion === 'number' ? raw.expectedVersion : undefined;
 
-  if (availableQuantity < 0 || reservedQuantity < 0) {
-    throw new Error('Inventory quantities cannot be negative');
-  }
+    if (availableQuantity < 0 || reservedQuantity < 0) {
+      throw new Error('Inventory quantities cannot be negative');
+    }
 
-  if (reservedQuantity > availableQuantity) {
-    throw new Error('reservedQuantity cannot be greater than availableQuantity');
-  }
+    if (reservedQuantity > availableQuantity) {
+      throw new Error('reservedQuantity cannot be greater than availableQuantity');
+    }
 
-  // Check product existence
-  const product = await repos.products.findById(productId);
-  if (!product) {
-    const err = new Error('Product not found');
-    (err as unknown as { statusCode: number }).statusCode = 404;
-    throw err;
-  }
+    // Check product existence inside transaction
+    const product = await txRepos.products.findById(productId);
+    if (!product) {
+      const err = new Error('Product not found');
+      (err as unknown as { statusCode: number }).statusCode = 404;
+      throw err;
+    }
 
-  const status = availableQuantity === 0 ? 'OUT_OF_STOCK' : ((raw.status as ProductInventory['status']) || 'IN_STOCK');
+    const status = availableQuantity === 0 ? 'OUT_OF_STOCK' : ((raw.status as ProductInventory['status']) || 'IN_STOCK');
 
-  const parsed = UpdateProductInventorySchema.parse({
-    ...raw,
-    availableQuantity,
-    reservedQuantity,
-    status,
-  }) as UpdateProductInventory;
+    const parsed = UpdateProductInventorySchema.parse({
+      ...raw,
+      availableQuantity,
+      reservedQuantity,
+      status,
+      expectedVersion,
+    }) as UpdateProductInventory;
 
-  const updated = await repos.productInventory.upsert(productId, { ...parsed, updatedBy: userId });
+    const updated = await txRepos.productInventory.upsert(productId, { ...parsed, updatedBy: userId });
 
-  await logAudit(repos, { userId, userRole }, 'UPDATE_PRODUCT_INVENTORY', 'product_inventory', updated.id, {
-    productId,
-    status: updated.status,
-    availableQuantity: updated.availableQuantity,
-    reservedQuantity: updated.reservedQuantity,
+    await logAudit(txRepos, { userId, userRole }, 'UPDATE_PRODUCT_INVENTORY', 'product_inventory', updated.id, {
+      productId,
+      status: updated.status,
+      availableQuantity: updated.availableQuantity,
+      reservedQuantity: updated.reservedQuantity,
+      version: updated.version,
+    });
+
+    return updated;
   });
-
-  return updated;
 }
 
-export function createInventoryRouter(repos: Repositories): Router {
+export function createInventoryRouter(
+  repos: Repositories,
+  driver: RepositoryDriver = 'memory',
+  pool?: any
+): Router {
   const router = Router();
 
   // GET /api/v1/inventory
@@ -80,22 +92,30 @@ export function createInventoryRouter(repos: Repositories): Router {
     }
   });
 
-  // PUT /api/v1/inventory/:productId
+  // PUT /api/v1/inventory/:productId (Atomic Transaction with Optimistic Locking)
   router.put('/:productId', async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const updated = await updateProductInventory(repos, req.params.productId, req.body);
+      const updated = await updateProductInventory(repos, req.params.productId, req.body, 'dashboard-admin', 'ADMIN', driver, pool);
       res.json({ data: updated });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const code = (err as unknown as { statusCode?: number }).statusCode;
+      const code = (err as unknown as { statusCode?: number; code?: string }).statusCode || (err as unknown as { code?: string }).code;
+
+      if (code === 409 || code === 'INVENTORY_VERSION_CONFLICT' || msg.includes('version conflict')) {
+        res.status(409).json({ error: { code: 'INVENTORY_VERSION_CONFLICT', message: 'Inventory version conflict or concurrent modification' } });
+        return;
+      }
+
       if (code === 404 || msg.includes('Product not found')) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Product not found' } });
         return;
       }
+
       if (msg.includes('reservedQuantity') || msg.includes('negative')) {
         res.status(400).json({ error: { code: 'INVALID_QUANTITY', message: msg } });
         return;
       }
+
       next(err);
     }
   });

@@ -7,7 +7,7 @@ import type {
 } from '@limax/shared';
 
 export class PgCustomerRepository implements ICustomerRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findAll(params: { page: number; limit: number; search?: string }): Promise<PaginatedResult<Customer>> {
     const { page, limit, search } = params;

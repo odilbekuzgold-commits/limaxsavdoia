@@ -2,7 +2,7 @@ import type pg from 'pg';
 import type { AIUsageLog, IAIUsageRepository } from '@limax/shared';
 
 export class PgAIUsageRepository implements IAIUsageRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async create(data: Omit<AIUsageLog, 'id' | 'createdAt'>): Promise<AIUsageLog> {
     const result = await this.pool.query<Record<string, unknown>>(

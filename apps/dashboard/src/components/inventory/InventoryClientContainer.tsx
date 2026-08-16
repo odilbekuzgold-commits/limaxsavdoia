@@ -17,6 +17,7 @@ export interface InventoryItem {
   reservedQuantity: number;
   unit: string;
   warehouse?: string;
+  version?: number;
   updatedAt?: string;
 }
 
@@ -75,6 +76,7 @@ export function InventoryClientContainer({ initialProducts, initialInventory }: 
         unit,
         warehouse,
         status: avail === 0 ? 'OUT_OF_STOCK' : status,
+        expectedVersion: editingItem.inv?.version,
       });
 
       if (!resp.success) {

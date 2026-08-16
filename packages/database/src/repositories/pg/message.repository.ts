@@ -5,7 +5,7 @@ import type {
 } from '@limax/shared';
 
 export class PgMessageRepository implements IMessageRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findByConversationId(conversationId: string): Promise<Message[]> {
     const result = await this.pool.query<Record<string, unknown>>(

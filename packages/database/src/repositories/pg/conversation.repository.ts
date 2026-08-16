@@ -5,7 +5,7 @@ import type {
 } from '@limax/shared';
 
 export class PgConversationRepository implements IConversationRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findAll(params: { status?: string }): Promise<Conversation[]> {
     const { status } = params;

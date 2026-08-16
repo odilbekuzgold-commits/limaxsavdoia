@@ -6,7 +6,7 @@ import type {
 } from '@limax/shared';
 
 export class PgSalesSettingsRepository implements ISalesSettingsRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async getSettings(): Promise<SalesSettings> {
     const result = await this.pool.query<Record<string, unknown>>(

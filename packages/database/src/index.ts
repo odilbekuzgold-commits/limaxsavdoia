@@ -1,4 +1,6 @@
 import pg from 'pg';
+import type { Repositories } from '@limax/shared';
+import { createRepositories, type RepositoryDriver } from './repositories/index.js';
 
 const { Pool } = pg;
 
@@ -143,6 +145,34 @@ export async function runMigrations(customPool?: pg.Pool): Promise<void> {
   } finally {
     client.release();
   }
+}
+
+export async function withTransaction<T>(
+  driver: RepositoryDriver,
+  pool: pg.Pool | undefined,
+  repos: Repositories,
+  fn: (txRepos: Repositories, client?: pg.PoolClient) => Promise<T>
+): Promise<T> {
+  if (driver === 'postgres') {
+    if (!pool) {
+      throw new Error('PostgreSQL pool is required for transaction execution');
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const txRepos = createRepositories('postgres', client);
+      const result = await fn(txRepos, client);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  return fn(repos);
 }
 
 // Re-export repository layer

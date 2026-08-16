@@ -7,7 +7,7 @@ import type {
 export class PgTelegramUpdateReceiptRepository
   implements ITelegramUpdateReceiptRepository
 {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findByUpdateId(updateId: number): Promise<TelegramUpdateReceipt | null> {
     const result = await this.pool.query<Record<string, unknown>>(

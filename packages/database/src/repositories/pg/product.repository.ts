@@ -6,7 +6,7 @@ import type {
 } from '@limax/shared';
 
 export class PgProductRepository implements IProductRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findAll(params: { category?: string; activeOnly?: boolean }): Promise<Product[]> {
     const { category, activeOnly } = params;
@@ -26,7 +26,7 @@ export class PgProductRepository implements IProductRepository {
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const dataResult = await this.pool.query<Record<string, unknown>>(
-      `SELECT id, name, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at FROM products ${where} ORDER BY created_at DESC`,
+      `SELECT id, name, code, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at FROM products ${where} ORDER BY created_at DESC`,
       values
     );
 
@@ -35,7 +35,7 @@ export class PgProductRepository implements IProductRepository {
 
   async findById(id: string): Promise<Product | null> {
     const result = await this.pool.query<Record<string, unknown>>(
-      'SELECT id, name, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at FROM products WHERE id = $1',
+      'SELECT id, name, code, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at FROM products WHERE id = $1',
       [id]
     );
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
@@ -43,8 +43,19 @@ export class PgProductRepository implements IProductRepository {
 
   async create(data: CreateProduct): Promise<Product> {
     const result = await this.pool.query<Record<string, unknown>>(
-      `INSERT INTO products (name, category, description, price, currency, minimum_order, stock_status, media, active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at`,
-      [data.name, data.category, data.description || null, data.price, data.currency || 'UZS', data.minimumOrder ?? 1, data.stockStatus || 'in_stock', data.media || [], data.active ?? true]
+      `INSERT INTO products (name, code, category, description, price, currency, minimum_order, stock_status, media, active) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, name, code, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at`,
+      [
+        data.name,
+        data.code || null,
+        data.category,
+        data.description || null,
+        data.price,
+        data.currency || 'USD',
+        data.minimumOrder ?? 1,
+        data.stockStatus || 'in_stock',
+        data.media || [],
+        data.active ?? true,
+      ]
     );
     return this.mapRow(result.rows[0]);
   }
@@ -55,6 +66,7 @@ export class PgProductRepository implements IProductRepository {
     let idx = 1;
 
     if (data.name !== undefined) { sets.push(`name = $${idx++}`); values.push(data.name); }
+    if (data.code !== undefined) { sets.push(`code = $${idx++}`); values.push(data.code); }
     if (data.category !== undefined) { sets.push(`category = $${idx++}`); values.push(data.category); }
     if (data.description !== undefined) { sets.push(`description = $${idx++}`); values.push(data.description); }
     if (data.price !== undefined) { sets.push(`price = $${idx++}`); values.push(data.price); }
@@ -70,7 +82,7 @@ export class PgProductRepository implements IProductRepository {
     values.push(id);
 
     const result = await this.pool.query<Record<string, unknown>>(
-      `UPDATE products SET ${sets.join(', ')} WHERE id = $${idx} RETURNING id, name, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at`,
+      `UPDATE products SET ${sets.join(', ')} WHERE id = $${idx} RETURNING id, name, code, category, description, price, currency, minimum_order, stock_status, media, active, created_at, updated_at`,
       values
     );
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
@@ -80,6 +92,7 @@ export class PgProductRepository implements IProductRepository {
     return {
       id: row.id as string,
       name: row.name as string,
+      code: (row.code as string) || undefined,
       category: row.category as string,
       description: (row.description as string) || '',
       price: parseFloat(row.price as string),

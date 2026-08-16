@@ -6,7 +6,7 @@ import type {
 } from '@limax/shared';
 
 export class PgProductPriceRepository implements IProductPriceRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findByProductId(productId: string): Promise<ProductPrice[]> {
     const result = await this.pool.query<Record<string, unknown>>(

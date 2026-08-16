@@ -160,10 +160,10 @@ if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_BOT_TOKEN !== 'CHANGE_ME') {
 app.use('/api/v1/customers', createCustomersRouter(repos.customers));
 app.use('/api/v1/conversations', createConversationsRouter(repos.conversations, repos.messages, repos.handoffs));
 app.use('/api/v1/leads', createLeadsRouter(repos.leads));
-app.use('/api/v1/products', createProductsRouter(repos));
+app.use('/api/v1/products', createProductsRouter(repos, driver, pool));
 app.use('/api/v1/knowledge', createKnowledgeRouter(repos.knowledge));
-app.use('/api/v1/inventory', createInventoryRouter(repos));
-app.use('/api/v1/pricing', createPricingRouter(repos));
+app.use('/api/v1/inventory', createInventoryRouter(repos, driver, pool));
+app.use('/api/v1/pricing', createPricingRouter(repos, driver, pool));
 app.use('/api/v1/certificates', createCertificatesRouter(repos));
 app.use('/api/v1/media', createMediaRouter(repos));
 app.use('/api/v1/settings', createSettingsRouter(repos));

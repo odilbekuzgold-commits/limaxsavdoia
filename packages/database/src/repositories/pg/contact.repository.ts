@@ -5,7 +5,7 @@ import type {
 } from '@limax/shared';
 
 export class PgContactRepository implements IContactRepository {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findByCustomerId(customerId: string): Promise<Contact[]> {
     const result = await this.pool.query<Record<string, unknown>>(

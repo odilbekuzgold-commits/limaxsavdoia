@@ -7,7 +7,7 @@ import type {
 export class PgTelegramBusinessConnectionRepository
   implements ITelegramBusinessConnectionRepository
 {
-  constructor(private pool: pg.Pool) {}
+  constructor(private pool: pg.Pool | pg.PoolClient) {}
 
   async findByConnectionId(
     connectionId: string

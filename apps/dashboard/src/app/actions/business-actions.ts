@@ -81,6 +81,7 @@ export async function updateInventoryAction(productId: string, data: {
   unit?: string;
   warehouse?: string;
   status?: string;
+  expectedVersion?: number;
 }) {
   try {
     const res = await apiPut<{ data: unknown }>(`/api/v1/inventory/${productId}`, data);
@@ -88,6 +89,10 @@ export async function updateInventoryAction(productId: string, data: {
     revalidatePath('/dashboard/products');
     return { success: true, data: res.data };
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('409') || msg.includes('version conflict') || msg.includes('INVENTORY_VERSION_CONFLICT')) {
+      return { success: false, error: 'Ma’lumot boshqa sessiyada yangilangan. Sahifani yangilang.' };
+    }
+    return { success: false, error: msg };
   }
 }

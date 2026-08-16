@@ -9,7 +9,9 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "node --test tests/unit/stage3.test.ts tests/unit/stage3_1.test.ts tests/unit/stage4.test.ts tests/unit/stage5.test.ts tests/unit/stage6.test.ts tests/unit/stage6_business_data.test.ts tests/unit/stage7_conversation_regression.test.ts tests/unit/stage7_mock_conversation_routing.test.ts tests/unit/stage7b_final_safety.test.ts tests/unit/stage8_template_qa_router.test.ts tests/unit/stage9_presales_dashboard.test.ts tests/unit/stage9_telegram_handoff_delivery.test.ts tests/unit/stage10_safety_regression.test.ts tests/unit/stage10_2_utf8_localization.test.ts tests/unit/stage13_business_data_import.test.ts tests/unit/stage14_dashboard_business_crud.test.ts",
-    "test:integration:postgres": "node --test tests/integration/pg_handoff_delivery_persistence.test.ts"
+    "test:integration:handoff": "node --test tests/integration/pg_handoff_delivery_persistence.test.ts",
+    "test:integration:business-crud": "node --test tests/integration/pg_stage14_business_crud.test.ts",
+    "test:integration:postgres": "node --test tests/integration/pg_handoff_delivery_persistence.test.ts tests/integration/pg_stage14_business_crud.test.ts"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

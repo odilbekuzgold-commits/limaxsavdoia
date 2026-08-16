@@ -41,10 +41,10 @@ import {
 
 export type RepositoryDriver = 'memory' | 'postgres';
 
-export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool): Repositories {
+export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool | pg.PoolClient): Repositories {
   if (driver === 'postgres') {
     if (!pool) {
-      throw new Error('PostgreSQL pool is required when using postgres driver');
+      throw new Error('PostgreSQL pool or PoolClient is required when using postgres driver');
     }
     return {
       customers: new PgCustomerRepository(pool),
