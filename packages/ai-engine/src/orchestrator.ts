@@ -4,6 +4,9 @@ import type {
   Product,
   KnowledgeItem,
   Repositories,
+  StructuredBusinessFacts,
+  StructuredProductFact,
+  KnowledgeSnippet,
 } from '@limax/shared';
 import { detectLanguage, calculateLeadScore, applyGuardrails, matchProducts } from './index.js';
 import type { IAIProviderAdapter } from './providers/types.js';
@@ -15,7 +18,6 @@ import { KnowledgeRetriever } from './rag/retriever.js';
 import { loadBehaviorV2Config, type BehaviorV2Config } from './behavior.schema.js';
 import { getLocalizedTemplate } from './localization/templates.js';
 import { TemplateQARouter } from './templates/router.js';
-
 
 export interface AIOrchestratorConfig {
   aiMode?: 'mock' | 'real';
@@ -101,7 +103,7 @@ export class AIOrchestrator {
 
     // 2. Guardrail & Prompt Injection Pre-Check
     const guard = applyGuardrails(prompt, { lastResponse: context.lastResponse });
-    if (!guard.allowed || lowerPrompt.includes('system prompt') || lowerPrompt.includes('api key') || lowerPrompt.includes('oldingi qoidalarni unut')) {
+    if (!guard.allowed || lowerPrompt.includes('system prompt') || lowerPrompt.includes('api key') || lowerPrompt.includes('oldingi qoidalarni unut') || lowerPrompt.includes('ignore previous instructions')) {
       const res = await this.formatAndRecordHandoff(
         {
           replyText: templates.securityBlocked(),
@@ -175,9 +177,25 @@ export class AIOrchestrator {
       return this.enforceActionHonesty(res, options?.actionExecuted, templates);
     }
 
-    // 3.5. Template Q&A Router Stage (Dataset-based Router & Dynamic Lookup)
+    // 3.5. Assemble Structured PostgreSQL Business Facts (Priority 1 Truth)
+    let availableProducts: Product[] = context.availableProducts || [];
+    if (repos && availableProducts.length === 0) {
+      availableProducts = await repos.products.findAll({});
+    }
+
+    const activeProducts = availableProducts.filter((p) => p.active !== false);
+    const structuredFacts: StructuredBusinessFacts = repos
+      ? await this.assembleStructuredFacts(repos, activeProducts)
+      : { products: [], salesSettings: null };
+    const templateContext: AIContext = {
+      ...context,
+      availableProducts: activeProducts,
+      structuredBusinessFacts: structuredFacts,
+    };
+
+    // 3.6. Template Q&A Router Stage (Priority 0 — Zero Cost / No AI Provider Call)
     const templateRouter = new TemplateQARouter();
-    const templateResult = await templateRouter.routeQuery(prompt, context, {
+    const templateResult = await templateRouter.routeQuery(prompt, templateContext, {
       repos,
       actionExecuted: options?.actionExecuted,
     });
@@ -190,7 +208,7 @@ export class AIOrchestrator {
       if (needsHandoff) {
         const res = await this.formatAndRecordHandoff(
           { ...templateResult, needsHandoff: true },
-          context,
+          templateContext,
           repos,
           templateResult.intent === 'complaint' ? 'high' : 'medium'
         );
@@ -199,15 +217,8 @@ export class AIOrchestrator {
       return this.enforceActionHonesty(templateResult, options?.actionExecuted, templates);
     }
 
-    // 4. Structured Product & Business Data Source (Priority 1)
-    let availableProducts: Product[] = context.availableProducts || [];
-    if (repos && availableProducts.length === 0) {
-      availableProducts = await repos.products.findAll({});
-    }
-
-    const activeProducts = availableProducts.filter((p) => p.active !== false);
+    // 4.1. Fast Direct Product Resolution for Price / Stock Queries
     const matchedProducts = matchProducts(prompt, activeProducts);
-
     const isPriceOrStockQuery =
       lowerPrompt.includes('narxi') ||
       lowerPrompt.includes('price') ||
@@ -223,50 +234,97 @@ export class AIOrchestrator {
     if (isPriceOrStockQuery) {
       if (matchedProducts.length > 0) {
         const prod = matchedProducts[0];
+        const fact = structuredFacts.products.find((f) => f.id === prod.id);
 
-        let activePriceVal = prod.price;
-        let activeCurrency = prod.currency || 'USD';
-        let activeUnit = 'kg';
-        let minQty = prod.minimumOrder || 1;
+        const isStockQuery = lowerPrompt.includes('ombor') || lowerPrompt.includes('stock') || lowerPrompt.includes('bormi') || lowerPrompt.includes('борми') || lowerPrompt.includes('есть');
+        const isPriceQuery = lowerPrompt.includes('narxi') || lowerPrompt.includes('price') || lowerPrompt.includes('moq') || lowerPrompt.includes('почём') || lowerPrompt.includes('сколько');
 
-        if (repos) {
-          const activePriceObj = await repos.productPrices.findActiveByProductId(prod.id);
-          if (activePriceObj) {
-            activePriceVal = activePriceObj.price;
-            activeCurrency = activePriceObj.currency;
-            activeUnit = activePriceObj.unit;
-            minQty = activePriceObj.minimumQuantity;
+        // Stock truth check
+        if (isStockQuery && !isPriceQuery) {
+          if (!fact?.inventory || fact.inventory.status === 'UNKNOWN') {
+            const res = await this.formatAndRecordHandoff(
+              {
+                replyText: templates.unknownStock(prod.name),
+                language: lang,
+                intent: 'product_stock',
+                confidence: 0.5,
+                needsHandoff: true,
+                handoffReason: 'STOCK_STATUS_UNKNOWN',
+                leadSignals: { productNeed: prod.name },
+                usedKnowledgeIds: [],
+              },
+              context,
+              repos
+            );
+            return this.enforceActionHonesty(res, options?.actionExecuted, templates);
           }
 
-          const inventoryObj = await repos.productInventory.findByProductId(prod.id);
-          if (inventoryObj) {
-            if (inventoryObj.status === 'OUT_OF_STOCK' || inventoryObj.status === 'UNKNOWN') {
-              const res = await this.formatAndRecordHandoff(
-                {
-                  replyText: templates.unknownStock(prod.name),
-                  language: lang,
-                  intent: 'product_stock',
-                  confidence: 0.5,
-                  needsHandoff: true,
-                  handoffReason: `INVENTORY_STATUS_${inventoryObj.status}`,
-                  leadSignals: { productNeed: prod.name },
-                  usedKnowledgeIds: [],
-                },
-                context,
-                repos
-              );
-              return this.enforceActionHonesty(res, options?.actionExecuted, templates);
-            }
+          if (fact.inventory.status === 'OUT_OF_STOCK' || fact.inventory.netAvailable <= 0) {
+            const res = await this.formatAndRecordHandoff(
+              {
+                replyText: `${prod.name} ayni paytda omborda mavjud emas. Buyurtma qilish yoki keyingi partiya muddatini bilish uchun menejerimiz bog'lanadi.`,
+                language: lang,
+                intent: 'product_stock',
+                confidence: 0.95,
+                needsHandoff: true,
+                handoffReason: 'INVENTORY_STATUS_OUT_OF_STOCK',
+                leadSignals: { productNeed: prod.name },
+                usedKnowledgeIds: [],
+              },
+              context,
+              repos
+            );
+            return this.enforceActionHonesty(res, options?.actionExecuted, templates);
           }
+
+          // Positive stock
+          return this.enforceActionHonesty(
+            {
+              replyText: `${prod.name} omborda mavjud (${fact.inventory.netAvailable} kg qoldiq). Buyurtma miqdorini bildirsangiz, rasmiylashtirishda yordam beraman.`,
+              language: lang,
+              intent: 'product_stock',
+              confidence: 0.98,
+              needsHandoff: false,
+              leadSignals: { productNeed: prod.name },
+              usedKnowledgeIds: [],
+            },
+            options?.actionExecuted,
+            templates
+          );
         }
 
-        if (!activePriceVal || activePriceVal <= 0) {
+        // Price truth check (Strict: NO legacy products.price fallback when pricing table is available!)
+        let activePriceVal: number | null = null;
+        let activeCurrency = 'USD';
+        let activeUnit = 'kg';
+        let minQty = 1;
+
+        if (fact?.activePrice) {
+          activePriceVal = fact.activePrice.amount;
+          activeCurrency = fact.activePrice.currency;
+          activeUnit = fact.activePrice.unit;
+          minQty = fact.activePrice.minimumQuantity;
+        } else if (repos && repos.productPrices) {
+          const pObj = await repos.productPrices.findActiveByProductId(prod.id);
+          if (pObj && pObj.active) {
+            activePriceVal = pObj.price;
+            activeCurrency = pObj.currency;
+            activeUnit = pObj.unit;
+            minQty = pObj.minimumQuantity;
+          }
+        } else if (!repos && prod.price && prod.price > 0) {
+          activePriceVal = prod.price;
+          activeCurrency = prod.currency || 'USD';
+          minQty = prod.minimumOrder || 1;
+        }
+
+        if (activePriceVal === null || activePriceVal <= 0) {
           const res = await this.formatAndRecordHandoff(
             {
-              replyText: templates.unknownPrice(prod.name),
+              replyText: `${prod.name} uchun amaldagi narx bazada tasdiqlanmagan. Aniq narx va tijoriy taklif uchun menejerimiz siz bilan bog'lanadi.`,
               language: lang,
               intent: 'product_price',
-              confidence: 0.3,
+              confidence: 0.5,
               needsHandoff: true,
               handoffReason: 'MISSING_ACTIVE_PRICE',
               leadSignals: { productNeed: prod.name },
@@ -278,6 +336,7 @@ export class AIOrchestrator {
           return this.enforceActionHonesty(res, options?.actionExecuted, templates);
         }
 
+        // Active validated price
         const reply = `${prod.name} narxi 1 ${activeUnit} uchun ${activePriceVal} ${activeCurrency}. Minimal buyurtma (MOQ): ${minQty} ${activeUnit}.`;
         return this.enforceActionHonesty(
           {
@@ -312,20 +371,43 @@ export class AIOrchestrator {
       }
     }
 
-    // 5. Approved Knowledge Base (Priority 2)
+    // 5. Approved Knowledge Base Retrieval (Priority 2)
     let knowledgeItems: KnowledgeItem[] = [];
     if (repos) {
       const allKB = await repos.knowledge.findAll({});
       const now = new Date();
+      // Strict: Only APPROVED and unexpired knowledge items
       knowledgeItems = allKB.filter(
         (k) => k.status === 'APPROVED' && (!k.validUntil || new Date(k.validUntil) > now)
       );
     }
-    const retriever = new KnowledgeRetriever(knowledgeItems);
-    const ragResults = await retriever.retrieve(prompt, { language: lang, minScore: 0.6 });
 
+    const retriever = new KnowledgeRetriever(knowledgeItems);
+    const ragResults = await retriever.retrieve(prompt, { language: lang, minScore: 0.6, topK: 5 });
+
+    const approvedKnowledgeSnippets: KnowledgeSnippet[] = ragResults.map((r) => ({
+      id: r.item.id,
+      title: r.item.title,
+      content: r.item.content,
+      score: r.score,
+      source: r.item.source,
+    }));
+
+    const usedKnowledgeIds = approvedKnowledgeSnippets.map((s) => s.id);
+
+    // 6. Build Immutable Enriched Context for AI Provider
+    const enrichedContext: AIContext = {
+      ...context,
+      availableProducts: activeProducts,
+      approvedKnowledgeItems: approvedKnowledgeSnippets,
+      knowledgeSnippets: approvedKnowledgeSnippets,
+      structuredBusinessFacts: structuredFacts,
+      ragSources: approvedKnowledgeSnippets.map((s) => s.source || s.id),
+    };
+
+    // If query requires domain knowledge and nothing was retrieved -> handoff
     if (knowledgeItems.length === 0 || ragResults.length === 0) {
-      if (lowerPrompt.includes('limax') || lowerPrompt.includes('siyosat') || lowerPrompt.includes('sertifikat')) {
+      if (lowerPrompt.includes('limax') || lowerPrompt.includes('siyosat') || lowerPrompt.includes('sertifikat') || lowerPrompt.includes('shartnoma')) {
         const res = await this.formatAndRecordHandoff(
           {
             replyText: templates.unknownPrice(),
@@ -344,15 +426,20 @@ export class AIOrchestrator {
       }
     }
 
-    // 6. Mode Check: If mock mode -> use MockAdapter
+    // 7. Mode Check: If mock mode -> use MockAdapter with Enriched Context
     if (this.aiMode === 'mock') {
       const mockAdapter = new MockAIProviderAdapter();
-      const raw = await mockAdapter.generateStructuredResponse(prompt, { ...context, availableProducts: activeProducts });
-      const processed = await this.applyPostProcessing(raw.result, prompt, context, repos);
+      const raw = await mockAdapter.generateStructuredResponse(prompt, enrichedContext);
+      const processed = await this.applyPostProcessing(
+        { ...raw.result, usedKnowledgeIds: raw.result.usedKnowledgeIds?.length ? raw.result.usedKnowledgeIds : usedKnowledgeIds },
+        prompt,
+        enrichedContext,
+        repos
+      );
       return this.enforceActionHonesty(processed, options?.actionExecuted, templates);
     }
 
-    // 7. Real Provider Execution with Fallback
+    // 8. Real Provider Execution with Enriched Context & Fallback
     let fallbackUsed = false;
     let selectedAdapter = this.primaryAdapter;
     if (!selectedAdapter.isConfigured()) {
@@ -361,7 +448,7 @@ export class AIOrchestrator {
     }
 
     try {
-      const raw = await selectedAdapter.generateStructuredResponse(prompt, context, { timeoutMs: this.timeoutMs });
+      const raw = await selectedAdapter.generateStructuredResponse(prompt, enrichedContext, { timeoutMs: this.timeoutMs });
 
       if (repos) {
         await repos.aiUsage.create({
@@ -376,12 +463,18 @@ export class AIOrchestrator {
         });
       }
 
-      const processed = await this.applyPostProcessing(raw.result, prompt, context, repos);
+      const guardedResult = this.guardStructuredFacts(raw.result, structuredFacts, templates);
+      const processed = await this.applyPostProcessing(
+        { ...guardedResult, usedKnowledgeIds: guardedResult.usedKnowledgeIds?.length ? guardedResult.usedKnowledgeIds : usedKnowledgeIds },
+        prompt,
+        enrichedContext,
+        repos
+      );
       return this.enforceActionHonesty(processed, options?.actionExecuted, templates);
     } catch {
       if (!fallbackUsed && this.fallbackAdapter.isConfigured()) {
         try {
-          const fallbackRaw = await this.fallbackAdapter.generateStructuredResponse(prompt, context, { timeoutMs: this.timeoutMs });
+          const fallbackRaw = await this.fallbackAdapter.generateStructuredResponse(prompt, enrichedContext, { timeoutMs: this.timeoutMs });
 
           if (repos) {
             await repos.aiUsage.create({
@@ -396,7 +489,13 @@ export class AIOrchestrator {
             });
           }
 
-          const processed = await this.applyPostProcessing(fallbackRaw.result, prompt, context, repos);
+          const guardedResult = this.guardStructuredFacts(fallbackRaw.result, structuredFacts, templates);
+          const processed = await this.applyPostProcessing(
+            { ...guardedResult, usedKnowledgeIds: guardedResult.usedKnowledgeIds?.length ? guardedResult.usedKnowledgeIds : usedKnowledgeIds },
+            prompt,
+            enrichedContext,
+            repos
+          );
           return this.enforceActionHonesty(processed, options?.actionExecuted, templates);
         } catch {
           // Fallback failed
@@ -419,6 +518,130 @@ export class AIOrchestrator {
       );
       return this.enforceActionHonesty(res, options?.actionExecuted, templates);
     }
+  }
+
+  private async assembleStructuredFacts(
+    repos: Repositories | undefined,
+    activeProducts: Product[]
+  ): Promise<StructuredBusinessFacts> {
+    if (!repos) {
+      return {
+        products: activeProducts.map((p) => ({
+          id: p.id,
+          name: p.name,
+          code: p.code,
+          category: p.category,
+          description: p.description,
+          activePrice: null,
+          inventory: null,
+        })),
+        salesSettings: null,
+      };
+    }
+
+    const productFacts: StructuredProductFact[] = [];
+
+    for (const p of activeProducts) {
+      let activePrice: StructuredProductFact['activePrice'] = null;
+      let inventory: StructuredProductFact['inventory'] = null;
+
+      try {
+        const pObj = await repos.productPrices.findActiveByProductId(p.id);
+        if (pObj && pObj.active) {
+          activePrice = {
+            amount: pObj.price,
+            currency: pObj.currency,
+            unit: pObj.unit,
+            minimumQuantity: pObj.minimumQuantity,
+            validFrom: pObj.validFrom ? new Date(pObj.validFrom).toISOString() : new Date().toISOString(),
+            validUntil: pObj.validUntil ? new Date(pObj.validUntil).toISOString() : undefined,
+          };
+        }
+      } catch {
+        activePrice = null;
+      }
+
+      try {
+        const invObj = await repos.productInventory.findByProductId(p.id);
+        if (invObj) {
+          const avail = invObj.availableQuantity ?? 0;
+          const res = invObj.reservedQuantity ?? 0;
+          const net = Math.max(0, avail - res);
+          const status = avail === 0 || net === 0 ? 'OUT_OF_STOCK' : invObj.status;
+
+          inventory = {
+            availableQuantity: avail,
+            reservedQuantity: res,
+            netAvailable: net,
+            status,
+            warehouse: invObj.warehouse || null,
+          };
+        }
+      } catch {
+        inventory = null;
+      }
+
+      productFacts.push({
+        id: p.id,
+        name: p.name,
+        code: p.code,
+        category: p.category,
+        description: p.description,
+        activePrice,
+        inventory,
+      });
+    }
+
+    let salesSettings = null;
+    try {
+      if (repos.salesSettings) {
+        salesSettings = await repos.salesSettings.getSettings();
+      }
+    } catch {
+      salesSettings = null;
+    }
+
+    return {
+      products: productFacts,
+      salesSettings,
+    };
+  }
+
+  private guardStructuredFacts(
+    result: AIStructuredResult,
+    facts: StructuredBusinessFacts,
+    templates: ReturnType<typeof getLocalizedTemplate>
+  ): AIStructuredResult {
+    // If LLM hallucinates prices or available stock for products where DB has UNKNOWN or OUT_OF_STOCK
+    const replyLower = result.replyText.toLowerCase();
+
+    // Check if reply mentions positive stock when DB says OUT_OF_STOCK
+    for (const p of facts.products) {
+      if (p.inventory?.status === 'OUT_OF_STOCK' && (replyLower.includes(p.name.toLowerCase()) || (p.code && replyLower.includes(p.code.toLowerCase())))) {
+        if (replyLower.includes('omborda bor') || replyLower.includes('mavjud') || replyLower.includes('в наличии')) {
+          return {
+            ...result,
+            replyText: `${p.name} ayni paytda omborda mavjud emas. Buyurtma berish uchun menejerimiz bog'lanadi.`,
+            needsHandoff: true,
+            handoffReason: 'POST_GUARD_OUT_OF_STOCK_OVERRIDE',
+          };
+        }
+      }
+
+      // Check if price is unconfirmed but LLM gave a specific price
+      if (!p.activePrice && (replyLower.includes(p.name.toLowerCase()) || (p.code && replyLower.includes(p.code.toLowerCase())))) {
+        if (result.intent === 'product_price' && /\d+(\.\d+)?\s*(usd|\$|so'm|сум)/i.test(result.replyText)) {
+          return {
+            ...result,
+            replyText: `${p.name} uchun amaldagi narx bazada tasdiqlanmagan. Aniq narxni menejerimiz ma'lum qiladi.`,
+            needsHandoff: true,
+            handoffReason: 'POST_GUARD_UNCONFIRMED_PRICE_OVERRIDE',
+          };
+        }
+      }
+    }
+
+    return result;
   }
 
   private enforceActionHonesty(
@@ -444,21 +667,27 @@ export class AIOrchestrator {
     priority: 'low' | 'medium' | 'high' | 'urgent' = 'high'
   ): Promise<AIStructuredResult & { suppressAutoReply?: boolean }> {
     if (context.conversationId && repos) {
-      const existingHandoffs = await repos.handoffs.findByConversationId(context.conversationId);
-      const pendingHandoff = existingHandoffs.find((h) => h.status === 'PENDING');
+      const conv = await repos.conversations.findById(context.conversationId);
+      const customerId = context.customerId || conv?.customerId;
 
-      if (!pendingHandoff) {
-        await repos.handoffs.create({
-          conversationId: context.conversationId,
-          customerId: context.customerId || '00000000-0000-0000-0000-000000000000',
-          reason: result.handoffReason || 'AUTO_HANDOFF',
-          priority,
-          status: 'PENDING',
-          notes: `Auto handoff triggered for intent ${result.intent}`,
-        });
+      if (customerId) {
+        const existingHandoffs = await repos.handoffs.findByConversationId(context.conversationId);
+        const pendingHandoff = existingHandoffs.find((h) => h.status === 'PENDING');
+
+        if (!pendingHandoff) {
+          await repos.handoffs.create({
+            conversationId: context.conversationId,
+            customerId,
+            reason: result.handoffReason || 'AUTO_HANDOFF',
+            priority,
+            status: 'PENDING',
+            notes: `Auto handoff triggered for intent ${result.intent}`,
+          });
+        }
+
+        await repos.conversations.update(context.conversationId, { status: 'WAITING_MANAGER' });
       }
 
-      await repos.conversations.update(context.conversationId, { status: 'WAITING_MANAGER' });
       return {
         ...result,
         needsHandoff: true,
@@ -466,7 +695,10 @@ export class AIOrchestrator {
       };
     }
 
-    return result;
+    return {
+      ...result,
+      needsHandoff: true,
+    };
   }
 
   private async applyPostProcessing(

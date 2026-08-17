@@ -8,7 +8,8 @@ export function extractEntities(text: string): ExtractedEntities {
   const entities: ExtractedEntities = {};
 
   // 1. Product token extraction
-  const productMatches = text.match(PROTECTED_PRODUCT_TOKEN_RE);
+  const productRe = new RegExp(PROTECTED_PRODUCT_TOKEN_RE.source, 'gi');
+  const productMatches = text.match(productRe);
   if (productMatches && productMatches.length > 0) {
     entities.product = productMatches[0].toUpperCase();
   } else {

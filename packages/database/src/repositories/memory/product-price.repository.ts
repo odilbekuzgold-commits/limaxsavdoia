@@ -8,6 +8,8 @@ import type {
 export class InMemoryProductPriceRepository implements IProductPriceRepository {
   private db: Map<string, ProductPrice> = new Map();
 
+  constructor(private productRepo?: { findById(id: string): Promise<{ id: string; price?: number; currency?: string; minimumOrder?: number; active?: boolean } | null> }) {}
+
   async findByProductId(productId: string): Promise<ProductPrice[]> {
     return Array.from(this.db.values())
       .filter((p) => p.productId === productId)
@@ -21,6 +23,23 @@ export class InMemoryProductPriceRepository implements IProductPriceRepository {
       if (item.validFrom && item.validFrom.getTime() > date.getTime()) continue;
       if (item.validUntil && item.validUntil.getTime() < date.getTime()) continue;
       return item;
+    }
+    if (all.length === 0 && this.productRepo) {
+      const prod = await this.productRepo.findById(productId);
+      if (prod && typeof prod.price === 'number' && prod.price > 0 && prod.active !== false) {
+        return {
+          id: `auto-price-${prod.id}`,
+          productId: prod.id,
+          price: prod.price ?? 0,
+          currency: prod.currency ?? 'USD',
+          unit: 'kg',
+          minimumQuantity: 1,
+          active: true,
+          validFrom: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
     }
     return null;
   }

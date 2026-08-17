@@ -10,12 +10,14 @@ export function normalizeCustomerMessage(
 ): { normalizedText: string; preservedTokens: string[] } {
   if (!text) return { normalizedText: '', preservedTokens: [] };
 
+  const productRe = new RegExp(PROTECTED_PRODUCT_TOKEN_RE.source, 'gi');
+
   // 1. Extract protected product tokens first
   const preservedTokens: string[] = [];
   const tokenMap = new Map<string, string>();
 
   let tokenIndex = 0;
-  const textWithPlaceholders = text.replace(PROTECTED_PRODUCT_TOKEN_RE, (match) => {
+  const textWithPlaceholders = text.replace(productRe, (match) => {
     const placeholder = `__PRODUCT_TOKEN_${tokenIndex}__`;
     preservedTokens.push(match.toUpperCase());
     tokenMap.set(placeholder, match.toUpperCase());

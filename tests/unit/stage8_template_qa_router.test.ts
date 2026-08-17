@@ -53,25 +53,28 @@ const mkProduct = (overrides: Partial<Product> = {}): Product => ({
   ...overrides,
 });
 
-const mkRepos = (): Repositories => ({
-  customers: new InMemoryCustomerRepository(),
-  contacts: {} as any,
-  conversations: new InMemoryConversationRepository(),
-  messages: {} as any,
-  leads: {} as any,
-  handoffs: new InMemoryHandoffRepository(),
-  products: new InMemoryProductRepository(),
-  knowledge: {} as any,
-  productPrices: new InMemoryProductPriceRepository(),
-  productInventory: new InMemoryProductInventoryRepository(),
-  productCertificates: {} as any,
-  productMedia: {} as any,
-  salesSettings: {} as any,
-  auditLogs: {} as any,
-  aiUsage: { create: async () => ({}) } as any,
-  telegramConnections: {} as any,
-  telegramReceipts: {} as any,
-});
+const mkRepos = (): Repositories => {
+  const products = new InMemoryProductRepository();
+  return {
+    customers: new InMemoryCustomerRepository(),
+    contacts: {} as any,
+    conversations: new InMemoryConversationRepository(),
+    messages: {} as any,
+    leads: {} as any,
+    handoffs: new InMemoryHandoffRepository(),
+    products,
+    knowledge: {} as any,
+    productPrices: new InMemoryProductPriceRepository(products),
+    productInventory: new InMemoryProductInventoryRepository(products),
+    productCertificates: {} as any,
+    productMedia: {} as any,
+    salesSettings: {} as any,
+    auditLogs: {} as any,
+    aiUsage: { create: async () => ({}) } as any,
+    telegramConnections: {} as any,
+    telegramReceipts: {} as any,
+  };
+};
 
 describe('Stage 8: Template Q&A Router Integration & Safety Tests', () => {
 

@@ -149,25 +149,47 @@ export function calculateLeadScore(data: ExtractedLeadData): LeadScoreResult {
 export function matchProducts(query: string, availableProducts: Product[]): Product[] {
   const cleanQuery = query.toLowerCase().replace(/[^\w\s/]/g, ' ');
   const words = cleanQuery.split(/\s+/).filter((w) => w.length >= 2);
-  const stopWords = new Set(['narxi', 'narx', 'qancha', 'price', 'cost', 'moq', 'ombor', 'stock', 'yoki', 'va']);
+  const stopWords = new Set([
+    'narxi', 'narx', 'qancha', 'price', 'cost', 'moq', 'ombor', 'stock', 'yoki', 'va',
+    'bormi', 'bor', 'nech', 'pul', 'ip', 'iplar', 'mahsulot', 'noma’lum', 'nomalum',
+    'test', 'stage15', 'test_stage15'
+  ]);
 
-  return availableProducts.filter((product) => {
-    const nameLower = product.name.toLowerCase();
-    const categoryLower = product.category.toLowerCase();
-    const descLower = product.description.toLowerCase();
+  const scored: Array<{ product: Product; score: number }> = [];
 
-    if (cleanQuery.includes(nameLower) || nameLower.includes(cleanQuery)) return true;
+  for (const product of availableProducts) {
+    const nameLower = product.name ? product.name.toLowerCase() : '';
+    const categoryLower = product.category ? product.category.toLowerCase() : '';
+    const descLower = product.description ? product.description.toLowerCase() : '';
+    const codeLower = product.code ? product.code.toLowerCase() : '';
+
+    let score = 0;
+    if (codeLower && cleanQuery.includes(codeLower)) score += 10;
+    if (nameLower && cleanQuery.includes(nameLower)) score += 8;
 
     for (const w of words) {
       if (!stopWords.has(w)) {
-        if (nameLower.includes(w) || categoryLower.includes(w) || descLower.includes(w)) {
-          return true;
-        }
+        if (nameLower && nameLower.includes(w)) score += 3;
+        if (codeLower && codeLower.includes(w)) score += 3;
+        if (categoryLower && categoryLower.includes(w)) score += 1;
+        if (descLower && descLower.includes(w)) score += 1;
       }
     }
 
-    return false;
-  });
+    if (score > 0) {
+      scored.push({ product, score });
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) return [];
+  const topScore = scored[0].score;
+  if (scored.length > 1 && topScore > scored[1].score) {
+    return [scored[0].product];
+  }
+
+  return scored.filter((s) => s.score === topScore).map((s) => s.product);
 }
 
 // ==========================================

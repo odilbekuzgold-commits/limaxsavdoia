@@ -391,6 +391,42 @@ export const KnowledgeItemSchema = z.object({
 });
 export type KnowledgeItem = z.infer<typeof KnowledgeItemSchema>;
 
+export interface StructuredProductFact {
+  id: string;
+  name: string;
+  code?: string;
+  category?: string;
+  description?: string;
+  activePrice?: {
+    amount: number;
+    currency: string;
+    unit: string;
+    minimumQuantity: number;
+    validFrom: string;
+    validUntil?: string;
+  } | null;
+  inventory?: {
+    availableQuantity: number;
+    reservedQuantity: number;
+    netAvailable: number;
+    status: ProductInventory['status'];
+    warehouse?: string | null;
+  } | null;
+}
+
+export interface StructuredBusinessFacts {
+  products: StructuredProductFact[];
+  salesSettings?: SalesSettings | null;
+}
+
+export interface KnowledgeSnippet {
+  id: string;
+  title: string;
+  content: string;
+  score?: number;
+  source?: string;
+}
+
 export interface AIContext {
   conversationId?: string;
   customerId?: string;
@@ -402,6 +438,12 @@ export interface AIContext {
   availableProducts?: Product[];
   /** APPROVED knowledge items only — injected by orchestrator before calling provider */
   approvedKnowledgeItems?: Array<{ id: string; title: string; content: string }>;
+  /** Retrieved APPROVED RAG snippets passed directly to providers */
+  knowledgeSnippets?: KnowledgeSnippet[];
+  /** Structured PostgreSQL business data (Priority 1 Truth) */
+  structuredBusinessFacts?: StructuredBusinessFacts;
+  /** RAG source identifiers for citation / audit */
+  ragSources?: string[];
   lastResponse?: string;
 }
 

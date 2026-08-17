@@ -18,7 +18,13 @@ export class InMemoryProductRepository implements IProductRepository {
 
   async create(data: CreateProduct): Promise<Product> {
     const now = new Date();
-    const product: Product = { ...data, aiRecommendable: data.aiRecommendable !== undefined ? data.aiRecommendable : true, id: randomUUID(), createdAt: now, updatedAt: now };
+    const product: Product = {
+      ...data,
+      aiRecommendable: data.aiRecommendable !== undefined ? data.aiRecommendable : true,
+      id: (data as any).id || randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+    };
     this.db.set(product.id, product);
     return product;
   }

@@ -8,8 +8,28 @@ import type {
 export class InMemoryProductInventoryRepository implements IProductInventoryRepository {
   private db: Map<string, ProductInventory> = new Map(); // key = productId
 
+  constructor(private productRepo?: { findById(id: string): Promise<{ id: string; stockStatus?: string } | null> }) {}
+
   async findByProductId(productId: string): Promise<ProductInventory | null> {
-    return this.db.get(productId) ?? null;
+    const existing = this.db.get(productId);
+    if (existing) return existing;
+    if (this.productRepo) {
+      const prod = await this.productRepo.findById(productId);
+      if (prod && prod.stockStatus) {
+        const isOut = prod.stockStatus === 'out_of_stock';
+        return {
+          id: `auto-inv-${prod.id}`,
+          productId: prod.id,
+          availableQuantity: isOut ? 0 : 1000,
+          reservedQuantity: 0,
+          unit: 'kg',
+          version: 1,
+          status: isOut ? 'OUT_OF_STOCK' : 'IN_STOCK',
+          updatedAt: new Date(),
+        };
+      }
+    }
+    return null;
   }
 
   async findAll(): Promise<ProductInventory[]> {

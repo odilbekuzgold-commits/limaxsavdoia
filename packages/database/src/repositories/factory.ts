@@ -68,6 +68,7 @@ export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool | pg
   }
 
   if (driver === 'memory') {
+    const products = new InMemoryProductRepository();
     return {
       customers: new InMemoryCustomerRepository(),
       contacts: new InMemoryContactRepository(),
@@ -75,9 +76,9 @@ export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool | pg
       messages: new InMemoryMessageRepository(),
       leads: new InMemoryLeadRepository(),
       handoffs: new InMemoryHandoffRepository(),
-      products: new InMemoryProductRepository(),
-      productPrices: new InMemoryProductPriceRepository(),
-      productInventory: new InMemoryProductInventoryRepository(),
+      products,
+      productPrices: new InMemoryProductPriceRepository(products),
+      productInventory: new InMemoryProductInventoryRepository(products),
       productCertificates: new InMemoryProductCertificateRepository(),
       productMedia: new InMemoryProductMediaRepository(),
       salesSettings: new InMemorySalesSettingsRepository(),

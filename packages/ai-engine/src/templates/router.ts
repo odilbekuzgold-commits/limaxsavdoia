@@ -82,11 +82,12 @@ export class TemplateQARouter {
       const secondaryResult = await this.renderMatch(secondaryMatches[0], prompt, context, repos, options);
       if (secondaryResult && secondaryResult.replyText && secondaryResult.replyText !== primaryResult.replyText) {
         const combinedText = `${primaryResult.replyText}\n${secondaryResult.replyText}`;
+        const combinedReasons = [primaryResult.handoffReason, secondaryResult.handoffReason].filter(Boolean);
         return {
           ...primaryResult,
           replyText: combinedText,
           needsHandoff: primaryResult.needsHandoff || secondaryResult.needsHandoff,
-          handoffReason: primaryResult.handoffReason || secondaryResult.handoffReason,
+          handoffReason: combinedReasons.length > 0 ? combinedReasons.join(';') : undefined,
         };
       }
     }
@@ -153,7 +154,7 @@ export class TemplateQARouter {
           bestConfidence = 0.92;
         } else if (compactItem.intent === 'PRICE' && /(narx|narxi|narxlar|нарх|нечпул|нецпул|қанчадан|qanchadan|price|cost|сколько стоит|скока)/i.test(lowerNormalized)) {
           bestConfidence = 0.92;
-        } else if (compactItem.intent === 'STOCK_AVAILABILITY' && /(bormi|mavjudmi|борми|мавжудми|qoldiq|ombor|sklad|stock|есть)/i.test(lowerNormalized) && !/(narx|narxi|нарх)/i.test(lowerNormalized)) {
+        } else if (compactItem.intent === 'STOCK_AVAILABILITY' && /(bormi|mavjudmi|борми|мавжудми|qoldiq|ombor|sklad|stock|есть)/i.test(lowerNormalized)) {
           bestConfidence = 0.92;
         } else if (compactItem.intent === 'DISCOUNT' && /(skidka|skidkali|chegirma|bonus|скидка|чегирма)/i.test(lowerNormalized)) {
           bestConfidence = 0.92;
@@ -214,28 +215,7 @@ export class TemplateQARouter {
     }
     const qaItem = qaMap.get(match.intentId) || qaMap.get(match.templateId);
 
-    // ── 1. HANDOFF_REQUIRED Intents ──────────────────────────────────────────
-    if (match.handoff || (qaItem && qaItem.handoff)) {
-      const handoffReply = isRu
-        ? 'Ваш запрос передан менеджеру. Пожалуйста, ожидайте.'
-        : isCyrl
-        ? 'Сўровингиз менежерга узатилди. Илтимос, кутинг.'
-        : 'So‘rovingiz menejerga uzatildi. Iltimos, kuting.';
-
-      return {
-        replyText: handoffReply,
-        language: lang,
-        intent: match.intentId,
-        confidence: match.confidence,
-        needsHandoff: true,
-        handoffReason: `TEMPLATE_HANDOFF_${match.intentId}`,
-        suppressAutoReply: true,
-        leadSignals: match.extractedEntities.product ? { productNeed: match.extractedEntities.product } : {},
-        usedKnowledgeIds: [],
-      };
-    }
-
-    // ── 2. DYNAMIC_DATABASE Intent Rendering ─────────────────────────────────
+    // ── 1. DYNAMIC_DATABASE Intent Rendering (Evaluates dynamic truth first) ─
     if (match.answerMode === 'DYNAMIC_DATABASE') {
       const productCode = match.extractedEntities.product;
 
@@ -283,41 +263,60 @@ export class TemplateQARouter {
       }
 
       if (match.intentId === 'PRICE') {
-        let currentPrice: number | undefined = activeProduct.price;
-        let currency = activeProduct.currency || 'USD';
+        let currentPrice: number | null = null;
+        let currency = 'USD';
+        let unit = 'kg';
+        let minQty = 1;
 
-        if (repos) {
-          const priceObj = await repos.productPrices.findActiveByProductId(activeProduct.id);
-          if (priceObj && priceObj.price > 0) {
-            currentPrice = priceObj.price;
-            currency = priceObj.currency || currency;
+        if (context.structuredBusinessFacts) {
+          const fact = context.structuredBusinessFacts.products.find((f) => f.id === activeProduct.id);
+          if (fact?.activePrice) {
+            currentPrice = fact.activePrice.amount;
+            currency = fact.activePrice.currency;
+            unit = fact.activePrice.unit;
+            minQty = fact.activePrice.minimumQuantity;
           }
+        } else if (repos && repos.productPrices) {
+          const priceObj = await repos.productPrices.findActiveByProductId(activeProduct.id);
+          const now = new Date();
+          if (priceObj && priceObj.active && (!priceObj.validUntil || new Date(priceObj.validUntil) > now)) {
+            currentPrice = priceObj.price;
+            currency = priceObj.currency || 'USD';
+            unit = priceObj.unit || 'kg';
+            minQty = priceObj.minimumQuantity || 1;
+          } else if (activeProduct.price && activeProduct.price > 0 && !priceObj) {
+            currentPrice = activeProduct.price;
+            currency = activeProduct.currency || 'USD';
+          }
+        } else if (activeProduct.price && activeProduct.price > 0) {
+          currentPrice = activeProduct.price;
+          currency = activeProduct.currency || 'USD';
         }
 
-        if (currentPrice && currentPrice > 0) {
+        if (currentPrice !== null && currentPrice > 0) {
           const priceText = isRu
-            ? `Цена ${activeProduct.name}: ${currentPrice} ${currency}.`
+            ? `Цена ${activeProduct.name}: ${currentPrice} ${currency} за 1 ${unit}. Мин. заказ (MOQ): ${minQty} ${unit}.`
             : isCyrl
-            ? `${activeProduct.name} нархи: ${currentPrice} ${currency}.`
-            : `${activeProduct.name} narxi: ${currentPrice} ${currency}.`;
+            ? `${activeProduct.name} нархи 1 ${unit} учун ${currentPrice} ${currency}. Минимал буюртма (MOQ): ${minQty} ${unit}.`
+            : `${activeProduct.name} narxi 1 ${unit} uchun ${currentPrice} ${currency}. Minimal buyurtma (MOQ): ${minQty} ${unit}.`;
           return {
             replyText: priceText,
             language: lang,
             intent: 'product_price',
-            confidence: 0.95,
+            confidence: 0.98,
             needsHandoff: false,
             leadSignals: { productNeed: activeProduct.name },
             usedKnowledgeIds: [],
           };
         }
 
-        // Missing active price in DB
+        // Missing active price in DB — Strict Business Truth (No fabricated numbers, no legacy price fallback)
         return {
           replyText: isRu
-            ? 'Цена уточняется у менеджера.'
+            ? `Действующая цена для ${activeProduct.name} не подтверждена в базе. Менеджер свяжется с вами.`
             : isCyrl
-            ? 'Жорий нарх тасдиқланмаган. Менежерга узатилади.'
-            : 'Joriy narx tasdiqlanmagan. Menejerga uzatiladi.',
+            ? `${activeProduct.name} учун амалдаги нарх базада тасдиқланмаган. Аниқ нарх бўйича менежеримиз боғланади.`
+            : `${activeProduct.name} uchun amaldagi narx bazada tasdiqlanmagan. Aniq narx va tijoriy taklif uchun menejerimiz siz bilan bog'lanadi.`,
           language: lang,
           intent: 'product_price',
           confidence: 0.70,
@@ -330,41 +329,60 @@ export class TemplateQARouter {
       }
 
       if (match.intentId === 'STOCK_AVAILABILITY') {
-        let stockStatusStr: string | undefined = activeProduct.stockStatus;
+        let inventoryObj: any = null;
 
-        if (repos) {
-          const invObj = await repos.productInventory.findByProductId(activeProduct.id);
-          if (invObj) {
-            stockStatusStr = invObj.status.toLowerCase();
+        if (context.structuredBusinessFacts) {
+          const fact = context.structuredBusinessFacts.products.find((f) => f.id === activeProduct.id);
+          if (fact?.inventory) {
+            inventoryObj = fact.inventory;
           }
+        } else if (repos && repos.productInventory) {
+          inventoryObj = await repos.productInventory.findByProductId(activeProduct.id);
         }
 
-        if (stockStatusStr === 'in_stock') {
-          const stockText = isRu
-            ? `${activeProduct.name} есть в наличии.`
-            : isCyrl
-            ? `${activeProduct.name} омборда мавжуд.`
-            : `${activeProduct.name} omborda mavjud.`;
+        if (!inventoryObj && !repos && !context.structuredBusinessFacts && activeProduct.stockStatus) {
+          const status = activeProduct.stockStatus.toUpperCase();
+          inventoryObj = {
+            availableQuantity: status === 'IN_STOCK' ? 1000 : 0,
+            reservedQuantity: 0,
+            status,
+          };
+        }
+
+        if (!inventoryObj || inventoryObj.status === 'UNKNOWN') {
+          // Missing inventory row in DB -> UNKNOWN (Strict Business Truth)
           return {
-            replyText: stockText,
+            replyText: isRu
+              ? `Наличие ${activeProduct.name} на складе уточняется у менеджера.`
+              : isCyrl
+              ? `${activeProduct.name} омбор қолдиғи ҳозирча аниқланмаган. Менежеримиз маълумот беради.`
+              : `${activeProduct.name} ombor qoldig'i hozircha aniqlanmagan. Bu bo'yicha menejerimiz sizga ma'lumot beradi.`,
             language: lang,
             intent: 'product_stock',
-            confidence: 0.95,
-            needsHandoff: false,
+            confidence: 0.70,
+            needsHandoff: true,
+            handoffReason: 'INVENTORY_STATUS_UNKNOWN',
+            suppressAutoReply: true,
             leadSignals: { productNeed: activeProduct.name },
             usedKnowledgeIds: [],
           };
-        } else if (stockStatusStr === 'out_of_stock') {
+        }
+
+        const avail = inventoryObj.availableQuantity ?? 0;
+        const res = inventoryObj.reservedQuantity ?? 0;
+        const net = Math.max(0, avail - res);
+
+        if (inventoryObj.status === 'OUT_OF_STOCK' || net <= 0) {
           const outText = isRu
             ? `${activeProduct.name} нет в наличии.`
             : isCyrl
-            ? `${activeProduct.name} омборда мавжуд эмас.`
-            : `${activeProduct.name} omborda mavjud emas.`;
+            ? `${activeProduct.name} айни пайтда омборда мавжуд эмас.`
+            : `${activeProduct.name} ayni paytda omborda mavjud emas. Buyurtma qilish yoki keyingi partiya muddatini bilish uchun menejerimiz bog'lanadi.`;
           return {
             replyText: outText,
             language: lang,
             intent: 'product_stock',
-            confidence: 0.95,
+            confidence: 0.98,
             needsHandoff: true,
             handoffReason: 'INVENTORY_STATUS_OUT_OF_STOCK',
             suppressAutoReply: true,
@@ -373,23 +391,43 @@ export class TemplateQARouter {
           };
         }
 
-        // Unknown stock status
+        // Positive stock
+        const stockText = isRu
+          ? `${activeProduct.name} есть в наличии.`
+          : isCyrl
+          ? `${activeProduct.name} омборда мавжуд (${net} кг қолдиқ).`
+          : `${activeProduct.name} omborda mavjud (${net} kg qoldiq). Buyurtma miqdorini bildirsangiz, rasmiylashtirishda yordam beraman.`;
         return {
-          replyText: isRu
-            ? `${activeProduct?.name || productCode}: наличие уточняется у менеджера.`
-            : isCyrl
-            ? `${activeProduct?.name || productCode}: жорий қолдиқ номаълум. Менежерга узатилади.`
-            : `${activeProduct?.name || productCode}: joriy qoldiq noma’lum. Menejerga uzatiladi.`,
+          replyText: stockText,
           language: lang,
           intent: 'product_stock',
-          confidence: 0.70,
-          needsHandoff: true,
-          handoffReason: 'INVENTORY_STATUS_UNKNOWN',
-          suppressAutoReply: true,
+          confidence: 0.98,
+          needsHandoff: false,
           leadSignals: { productNeed: activeProduct.name },
           usedKnowledgeIds: [],
         };
       }
+    }
+
+    // ── 2. HANDOFF_REQUIRED Intents ──────────────────────────────────────────
+    if (match.handoff || (qaItem && qaItem.handoff)) {
+      const handoffReply = isRu
+        ? 'Ваш запрос передан менеджеру. Пожалуйста, ожидайте.'
+        : isCyrl
+        ? 'Сўровингиз менежерга узатилди. Илтимос, кутинг.'
+        : 'So‘rovingiz menejerga uzatildi. Iltimos, kuting.';
+
+      return {
+        replyText: handoffReply,
+        language: lang,
+        intent: match.intentId,
+        confidence: match.confidence,
+        needsHandoff: true,
+        handoffReason: `TEMPLATE_HANDOFF_${match.intentId}`,
+        suppressAutoReply: true,
+        leadSignals: match.extractedEntities.product ? { productNeed: match.extractedEntities.product } : {},
+        usedKnowledgeIds: [],
+      };
     }
 
     // ── 3. STATIC_TEMPLATE Intent Rendering ───────────────────────────────────
