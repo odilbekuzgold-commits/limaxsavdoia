@@ -157,6 +157,7 @@ export interface IKnowledgeRepository {
       metadata?: Record<string, unknown>;
     }>
   ): Promise<void>;
+  delete(id: string): Promise<boolean>;
 }
 
 export interface ITelegramBusinessConnectionRepository {

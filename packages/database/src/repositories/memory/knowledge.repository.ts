@@ -170,6 +170,12 @@ export class InMemoryKnowledgeRepository implements IKnowledgeRepository {
     this.chunkDb.set(knowledgeItemId, stored);
   }
 
+  async delete(id: string): Promise<boolean> {
+    const existed = this.db.delete(id);
+    this.chunkDb.delete(id);
+    return existed;
+  }
+
   seed(item: KnowledgeItem): void {
     this.db.set(item.id, item);
   }

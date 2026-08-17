@@ -289,7 +289,7 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDependencies): Router
   });
 
   // POST /api/v1/knowledge/:id/approve
-  router.post('/:id/approve', async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/:id/approve', async (req: Request, res: Response, _next: NextFunction) => {
     try {
       // Security: Strictly ignore any client-spoofed managerId or userId in req.body
       const actor = deps.actorResolver ? deps.actorResolver(req) : resolveTrustedActor(req);
@@ -311,14 +311,51 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDependencies): Router
       res.json({ data: approved });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Knowledge approval failed';
+      let code = 'APPROVAL_FAILED';
+      if (message.includes('OPENAI_AUTH_FAILED')) code = 'EMBEDDING_AUTH_FAILED';
+      else if (message.includes('OPENAI_QUOTA_EXCEEDED')) code = 'EMBEDDING_QUOTA_EXCEEDED';
+      else if (message.includes('OPENAI_TIMEOUT')) code = 'EMBEDDING_TIMEOUT';
+      else if (message.includes('OPENAI_SERVICE_UNAVAILABLE')) code = 'EMBEDDING_SERVICE_UNAVAILABLE';
+      else if (message.includes('dimension')) code = 'INVALID_EMBEDDING_DIMENSIONS';
+      else if (message.includes('empty content')) code = 'EMPTY_CONTENT';
+
       // Sanitize internal error messages to ensure no secrets or raw embeddings leak
       const safeMessage = message.replace(/sk-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]');
       res.status(500).json({
         error: {
-          code: 'APPROVAL_FAILED',
+          code,
           message: safeMessage,
         },
       });
+    }
+  });
+
+  // DELETE /api/v1/knowledge/:id
+  router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const actor = deps.actorResolver ? deps.actorResolver(req) : resolveTrustedActor(req);
+      checkPermission(actor.role, 'knowledge.update');
+
+      const existing = await repo.findById(req.params.id);
+      if (!existing) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Knowledge item not found' } });
+        return;
+      }
+
+      const deleted = await repo.delete(req.params.id);
+      if (!deleted) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Knowledge item not found' } });
+        return;
+      }
+
+      await logAudit(deps.repos, { userId: actor.id, userRole: actor.role }, 'DELETE_KNOWLEDGE_ITEM', 'knowledge_items', req.params.id, {
+        title: existing.title,
+        status: existing.status,
+      });
+
+      res.json({ data: { id: req.params.id, deleted: true } });
+    } catch (err) {
+      next(err);
     }
   });
 

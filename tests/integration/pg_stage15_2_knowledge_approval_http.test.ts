@@ -388,4 +388,49 @@ describe('Stage 15.2: Real HTTP Atomic Knowledge Approval & pgvector Lifecycle T
     const chunkCount = (await pool.query('SELECT count(*) FROM knowledge_chunks WHERE knowledge_item_id = $1', [draft.id])).rows[0].count;
     assert.equal(chunkCount, '1', 'Parallel approvals must produce exactly 1 set of chunks');
   });
+
+  it('10. DELETE /api/v1/knowledge/:id removes item and cascade chunks with audit log', async () => {
+    const draft = await repos.knowledge.create({
+      title: 'STAGE15_2 Deletable Item',
+      content: 'O‘chirilishi kerak bo‘lgan matn.',
+      language: 'uz',
+      status: 'DRAFT',
+    });
+
+    // Approve first to create chunks
+    await fetch(`${baseUrl}/api/v1/knowledge/${draft.id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${TEST_INTERNAL_TOKEN}`,
+      },
+    });
+
+    // Delete via HTTP
+    const delRes = await fetch(`${baseUrl}/api/v1/knowledge/${draft.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${TEST_INTERNAL_TOKEN}`,
+      },
+    });
+
+    assert.equal(delRes.status, 200);
+    const delBody = await delRes.json() as any;
+    assert.equal(delBody.data?.deleted, true);
+
+    // Verify item deleted
+    const itemRow = (await pool.query('SELECT count(*) FROM knowledge_items WHERE id = $1', [draft.id])).rows[0].count;
+    assert.equal(itemRow, '0');
+
+    // Verify chunks cascade deleted
+    const chunkRow = (await pool.query('SELECT count(*) FROM knowledge_chunks WHERE knowledge_item_id = $1', [draft.id])).rows[0].count;
+    assert.equal(chunkRow, '0');
+
+    // Verify delete audit log
+    const auditRows = await pool.query(
+      "SELECT id, action FROM audit_logs WHERE entity = 'knowledge_items' AND entity_id = $1 AND action = 'DELETE_KNOWLEDGE_ITEM'",
+      [draft.id]
+    );
+    assert.ok(auditRows.rows.length >= 1);
+  });
 });

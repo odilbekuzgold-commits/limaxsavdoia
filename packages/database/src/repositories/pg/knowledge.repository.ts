@@ -217,6 +217,11 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
     }
   }
 
+  async delete(id: string): Promise<boolean> {
+    const result = await this.pool.query('DELETE FROM knowledge_items WHERE id = $1', [id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
   private mapRow(row: Record<string, unknown>): KnowledgeItem {
     return {
       id: row.id as string,

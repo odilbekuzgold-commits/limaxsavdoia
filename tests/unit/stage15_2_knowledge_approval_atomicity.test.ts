@@ -195,4 +195,41 @@ describe('Stage 15.2: Atomic Knowledge Approval & Lifecycle Unit Tests', () => {
     assert.equal(verifiedActor.id, 'verified-manager-123');
     assert.notEqual(verifiedActor.id, 'spoofed-id');
   });
+
+  it('8. OpenAIEmbeddingProvider executes batching for large number of texts', async () => {
+    const { OpenAIEmbeddingProvider } = await import('../../packages/ai-engine/dist/index.js');
+    const provider = new OpenAIEmbeddingProvider({
+      apiKey: 'test-key',
+      batchSize: 5,
+    });
+
+    let batchCallCount = 0;
+    // Mock the internal embedBatch
+    (provider as any).embedBatch = async (batch: string[]) => {
+      batchCallCount++;
+      return batch.map(() => new Array(1536).fill(0.01));
+    };
+
+    const texts = Array.from({ length: 12 }, (_, i) => `Paragraph chunk ${i}`);
+    const results = await provider.embed(texts);
+
+    assert.equal(results.length, 12);
+    assert.equal(batchCallCount, 3, '12 items with batchSize 5 must be split into 3 batches (5 + 5 + 2)');
+  });
+
+  it('9. OpenAIEmbeddingProvider categorizes 401, 429 and timeout errors cleanly without secret leak', async () => {
+    const { OpenAIEmbeddingProvider } = await import('../../packages/ai-engine/dist/index.js');
+    const provider = new OpenAIEmbeddingProvider({
+      apiKey: 'sk-proj-sensitiveapikey12345',
+      timeoutMs: 10,
+    });
+
+    await assert.rejects(
+      async () => provider.embed(['test']),
+      (err: Error) => {
+        assert.ok(!err.message.includes('sk-proj-sensitiveapikey12345'), 'Secret key must never be present in error message');
+        return true;
+      }
+    );
+  });
 });

@@ -5,6 +5,7 @@ export interface OpenAIEmbeddingConfig {
   model?: string;
   dimensions?: number;
   timeoutMs?: number;
+  batchSize?: number;
 }
 
 export class OpenAIEmbeddingProvider implements EmbeddingProvider {
@@ -13,20 +14,17 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
   private model: string;
   private dimensions: number;
   private timeoutMs: number;
+  private batchSize: number;
 
   constructor(config?: OpenAIEmbeddingConfig) {
     this.apiKey = config?.apiKey || process.env.OPENAI_API_KEY || '';
     this.model = config?.model || process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
     this.dimensions = config?.dimensions || parseInt(process.env.OPENAI_EMBEDDING_DIMENSIONS || '1536', 10);
     this.timeoutMs = config?.timeoutMs || 10000;
+    this.batchSize = config?.batchSize || 20;
   }
 
-  async embed(texts: string[]): Promise<number[][]> {
-    if (!texts || texts.length === 0) return [];
-    if (!this.apiKey) {
-      throw new Error('OpenAI Embedding Provider: API key is not configured');
-    }
-
+  private async embedBatch(texts: string[]): Promise<number[][]> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -49,6 +47,15 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
 
       if (!response.ok) {
         const status = response.status;
+        if (status === 401 || status === 403) {
+          throw new Error('OPENAI_AUTH_FAILED: OpenAI API key is invalid or unauthorized');
+        }
+        if (status === 429) {
+          throw new Error('OPENAI_QUOTA_EXCEEDED: OpenAI rate limit or quota exceeded');
+        }
+        if (status >= 500) {
+          throw new Error(`OPENAI_SERVICE_UNAVAILABLE: OpenAI server error ${status}`);
+        }
         throw new Error(`OpenAI Embedding API failed with status ${status}`);
       }
 
@@ -78,12 +85,30 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
       return results;
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(`OpenAI Embedding request timed out after ${this.timeoutMs}ms`);
+        throw new Error(`OPENAI_TIMEOUT: OpenAI embedding request timed out after ${this.timeoutMs}ms`);
       }
       const safeMsg = err instanceof Error ? err.message : 'Unknown embedding error';
-      throw new Error(`OpenAI Embedding generation failed: ${safeMsg}`);
+      // Sanitize any accidental key leak
+      const maskedMsg = safeMsg.replace(/sk-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]');
+      throw new Error(`OpenAI Embedding generation failed: ${maskedMsg}`);
     } finally {
       clearTimeout(timeoutId);
     }
+  }
+
+  async embed(texts: string[]): Promise<number[][]> {
+    if (!texts || texts.length === 0) return [];
+    if (!this.apiKey) {
+      throw new Error('OPENAI_AUTH_FAILED: OpenAI API key is not configured');
+    }
+
+    const allEmbeddings: number[][] = [];
+    for (let i = 0; i < texts.length; i += this.batchSize) {
+      const batch = texts.slice(i, i + this.batchSize);
+      const batchEmbeddings = await this.embedBatch(batch);
+      allEmbeddings.push(...batchEmbeddings);
+    }
+
+    return allEmbeddings;
   }
 }
