@@ -135,6 +135,7 @@ export interface IAuditLogRepository {
 export interface IKnowledgeRepository {
   findAll(params: { language?: SupportedLanguage; status?: KnowledgeStatus }): Promise<KnowledgeItem[]>;
   findById(id: string): Promise<KnowledgeItem | null>;
+  findByIdForUpdate(id: string): Promise<KnowledgeItem | null>;
   create(data: CreateKnowledgeItem): Promise<KnowledgeItem>;
   update(id: string, data: Partial<KnowledgeItem>): Promise<KnowledgeItem | null>;
   searchSimilar(

@@ -34,6 +34,10 @@ export class InMemoryKnowledgeRepository implements IKnowledgeRepository {
     return this.db.get(id) ?? null;
   }
 
+  async findByIdForUpdate(id: string): Promise<KnowledgeItem | null> {
+    return this.db.get(id) ?? null;
+  }
+
   async create(data: CreateKnowledgeItem): Promise<KnowledgeItem> {
     const now = new Date();
     const item: KnowledgeItem = { ...data, id: randomUUID(), status: data.status || 'DRAFT', createdAt: now, updatedAt: now };

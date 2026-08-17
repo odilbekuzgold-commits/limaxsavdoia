@@ -44,6 +44,14 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
   }
 
+  async findByIdForUpdate(id: string): Promise<KnowledgeItem | null> {
+    const result = await this.pool.query<Record<string, unknown>>(
+      'SELECT id, title, content, language, status, source, approved_by, approved_at, valid_from, valid_until, created_at, updated_at FROM knowledge_items WHERE id = $1 FOR UPDATE',
+      [id]
+    );
+    return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+  }
+
   async create(data: CreateKnowledgeItem): Promise<KnowledgeItem> {
     const result = await this.pool.query<Record<string, unknown>>(
       `INSERT INTO knowledge_items (title, content, language, status, source, valid_from, valid_until)
@@ -73,8 +81,13 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
     if (data.status !== undefined) { sets.push(`status = $${idx++}`); values.push(data.status); }
     if (data.source !== undefined) { sets.push(`source = $${idx++}`); values.push(data.source); }
     if (data.approvedBy !== undefined) {
-      sets.push(`approved_by = $${idx++}`); values.push(data.approvedBy);
-      sets.push(`approved_at = $${idx++}`); values.push(data.approvedBy ? new Date() : null);
+      let approvedByVal: string | null = null;
+      if (data.approvedBy) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.approvedBy);
+        approvedByVal = isUuid ? data.approvedBy : '00000000-0000-0000-0000-000000000001';
+      }
+      sets.push(`approved_by = $${idx++}`); values.push(approvedByVal);
+      sets.push(`approved_at = $${idx++}`); values.push(data.approvedAt !== undefined ? data.approvedAt : (data.approvedBy ? new Date() : null));
     }
     if (data.validFrom !== undefined) { sets.push(`valid_from = $${idx++}`); values.push(data.validFrom); }
     if (data.validUntil !== undefined) { sets.push(`valid_until = $${idx++}`); values.push(data.validUntil); }
@@ -171,59 +184,36 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
       metadata?: Record<string, unknown>;
     }>
   ): Promise<void> {
-    const isPool = 'connect' in this.pool && typeof this.pool.connect === 'function';
-    const client = isPool ? await (this.pool as pg.Pool).connect() : (this.pool as pg.PoolClient);
-    const shouldRelease = isPool;
+    // Delete existing chunks for this knowledge item
+    await this.pool.query('DELETE FROM knowledge_chunks WHERE knowledge_item_id = $1', [knowledgeItemId]);
 
-    try {
-      if (shouldRelease) {
-        await client.query('BEGIN');
-      }
-
-      // Delete existing chunks for this knowledge item
-      await client.query('DELETE FROM knowledge_chunks WHERE knowledge_item_id = $1', [knowledgeItemId]);
-
-      // Insert new chunks
-      for (const chunk of chunks) {
-        let vectorStr: string | null = null;
-        if (chunk.embedding && Array.isArray(chunk.embedding)) {
-          if (chunk.embedding.length !== 1536) {
-            throw new Error(`Chunk embedding must be exactly 1536 dimensions, got ${chunk.embedding.length}`);
-          }
-          for (let i = 0; i < chunk.embedding.length; i++) {
-            if (typeof chunk.embedding[i] !== 'number' || !Number.isFinite(chunk.embedding[i])) {
-              throw new Error(`Invalid chunk embedding value at index ${i}`);
-            }
-          }
-          vectorStr = `[${chunk.embedding.join(',')}]`;
+    // Insert new chunks
+    for (const chunk of chunks) {
+      let vectorStr: string | null = null;
+      if (chunk.embedding && Array.isArray(chunk.embedding)) {
+        if (chunk.embedding.length !== 1536) {
+          throw new Error(`Chunk embedding must be exactly 1536 dimensions, got ${chunk.embedding.length}`);
         }
-
-        await client.query(
-          `INSERT INTO knowledge_chunks (knowledge_item_id, chunk_index, content, language, embedding, metadata, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5::vector, $6, NOW(), NOW())`,
-          [
-            knowledgeItemId,
-            chunk.chunkIndex,
-            chunk.content,
-            chunk.language || 'uz',
-            vectorStr,
-            JSON.stringify(chunk.metadata || {}),
-          ]
-        );
+        for (let i = 0; i < chunk.embedding.length; i++) {
+          if (typeof chunk.embedding[i] !== 'number' || !Number.isFinite(chunk.embedding[i])) {
+            throw new Error(`Invalid chunk embedding value at index ${i}`);
+          }
+        }
+        vectorStr = `[${chunk.embedding.join(',')}]`;
       }
 
-      if (shouldRelease) {
-        await client.query('COMMIT');
-      }
-    } catch (err) {
-      if (shouldRelease) {
-        await client.query('ROLLBACK');
-      }
-      throw err;
-    } finally {
-      if (shouldRelease) {
-        (client as pg.PoolClient).release();
-      }
+      await this.pool.query(
+        `INSERT INTO knowledge_chunks (knowledge_item_id, chunk_index, content, language, embedding, metadata, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5::vector, $6, NOW(), NOW())`,
+        [
+          knowledgeItemId,
+          chunk.chunkIndex,
+          chunk.content,
+          chunk.language || 'uz',
+          vectorStr,
+          JSON.stringify(chunk.metadata || {}),
+        ]
+      );
     }
   }
 

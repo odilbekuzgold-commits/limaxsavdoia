@@ -121,7 +121,7 @@ import {
   TelegramPollingRunner,
 } from './modules/telegram/index.js';
 
-import { loadBehaviorV2Config } from '@limax/ai-engine';
+import { loadBehaviorV2Config, createEmbeddingProvider } from '@limax/ai-engine';
 
 try {
   loadBehaviorV2Config();
@@ -161,7 +161,15 @@ app.use('/api/v1/customers', createCustomersRouter(repos.customers));
 app.use('/api/v1/conversations', createConversationsRouter(repos.conversations, repos.messages, repos.handoffs));
 app.use('/api/v1/leads', createLeadsRouter(repos.leads));
 app.use('/api/v1/products', createProductsRouter(repos, driver, pool));
-app.use('/api/v1/knowledge', createKnowledgeRouter(repos.knowledge));
+app.use(
+  '/api/v1/knowledge',
+  createKnowledgeRouter({
+    repos,
+    driver,
+    pool,
+    embeddingProvider: createEmbeddingProvider(),
+  })
+);
 app.use('/api/v1/inventory', createInventoryRouter(repos, driver, pool));
 app.use('/api/v1/pricing', createPricingRouter(repos, driver, pool));
 app.use('/api/v1/certificates', createCertificatesRouter(repos));
