@@ -98,7 +98,7 @@ describe('Stage 10.1: PostgreSQL Handoff Delivery Persistence Integration Tests'
       const contact = await pgContactRepo.create({
         customerId: customer.id,
         channel: 'telegram',
-        externalId: 'pg_stage10_test_12345',
+        externalId: `pg_stage10_test_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         isPrimary: true,
       });
       const conv = await pgConvRepo.create({
@@ -212,11 +212,12 @@ describe('Stage 10.1: PostgreSQL Handoff Delivery Persistence Integration Tests'
       assert.strictEqual(reloadedHandoff.metadata?.managerNotificationStatus, 'SENT');
 
       // 14. Verify telegram_update_receipts.update_id is strictly BIGINT
+      const testUpdateId = Date.now() + 9000000000;
       const receiptRes = await pool.query(
         'INSERT INTO telegram_update_receipts (update_id, update_type, status) VALUES ($1, $2, $3) RETURNING update_id',
-        [9876543210, 'test_receipt_stage10', 'PROCESSED']
+        [testUpdateId, 'test_receipt_stage10', 'PROCESSED']
       );
-      assert.strictEqual(Number(receiptRes.rows[0].update_id), 9876543210);
+      assert.strictEqual(Number(receiptRes.rows[0].update_id), testUpdateId);
 
       // 15. UTF-8 Clean Round-Trip Preservation (uz-Latn, uz-Cyrl, ru)
       const utf8Latn = 'Murojaatingiz menejerlarimizga yuborildi. Tez orada siz bilan bog‘lanamiz.';

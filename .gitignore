@@ -48,3 +48,7 @@ experiments/
 scratch/
 *.tar.gz
 *.zip
+
+# Playwright E2E artifacts (never commit)
+playwright-report/
+test-results/

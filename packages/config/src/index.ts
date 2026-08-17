@@ -35,7 +35,7 @@ export const envSchema = z.object({
   // Telegram Configuration
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
-  TELEGRAM_UPDATE_MODE: z.enum(['polling', 'webhook']).default('polling'),
+  TELEGRAM_UPDATE_MODE: z.enum(['polling', 'webhook', 'disabled']).default('polling'),
   TELEGRAM_POLL_TIMEOUT_SECONDS: z.coerce.number().default(30),
   TELEGRAM_POLL_LIMIT: z.coerce.number().default(50),
   TELEGRAM_WEBHOOK_URL: z.string().optional(),
