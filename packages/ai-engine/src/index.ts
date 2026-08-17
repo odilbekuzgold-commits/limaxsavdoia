@@ -334,7 +334,7 @@ export class MockAIProvider implements AIProvider {
   }
 }
 
-// Stage 5 & Stage 7 Exports
+// Stage 5, Stage 7 & Stage 15.1 Exports
 export * from './providers/types.js';
 export { OpenAIProviderAdapter } from './providers/openai.provider.js';
 export { GeminiProviderAdapter } from './providers/gemini.provider.js';
@@ -342,6 +342,10 @@ export { ClaudeProviderAdapter } from './providers/claude.provider.js';
 export { MockAIProviderAdapter } from './providers/mock.provider.js';
 export * from './embeddings/types.js';
 export { MockEmbeddingProvider } from './embeddings/mock.embedding.js';
+export { OpenAIEmbeddingProvider } from './embeddings/openai.embedding.js';
+export { GeminiEmbeddingProvider } from './embeddings/gemini.embedding.js';
+export { createEmbeddingProvider } from './embeddings/factory.js';
+export { chunkKnowledgeContent } from './rag/chunker.js';
 export { KnowledgeRetriever } from './rag/retriever.js';
 export { AIOrchestrator } from './orchestrator.js';
 export * from './behavior.schema.js';

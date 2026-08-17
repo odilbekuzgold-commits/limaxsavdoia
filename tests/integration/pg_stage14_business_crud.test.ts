@@ -70,20 +70,21 @@ describe('Stage 14.2: Real PostgreSQL Business Data CRUD, Invariants & Safety In
     }
   });
 
-  it('1. Migrations 001-012 applied cleanly and ledger contains exactly 12 migrations', async (t) => {
+  it('1. Migrations 001-013 applied cleanly and ledger contains exactly 13 migrations', async (t) => {
     if (!TEST_DB_URL) return t.skip('LIMAX_TEST_DATABASE_URL is missing');
 
     const migrationRes = await pool.query<{ name: string }>(
       'SELECT name FROM _migrations ORDER BY id ASC'
     );
-    assert.strictEqual(migrationRes.rows.length, 12, '_migrations ledger must contain exactly 12 migrations');
+    assert.strictEqual(migrationRes.rows.length, 13, '_migrations ledger must contain exactly 13 migrations');
     assert.ok(migrationRes.rows.some((r) => r.name.includes('011_products_code_unique')), '011_products_code_unique migration must be recorded');
     assert.ok(migrationRes.rows.some((r) => r.name.includes('012_product_prices_single_active')), '012_product_prices_single_active migration must be recorded');
+    assert.ok(migrationRes.rows.some((r) => r.name.includes('013_knowledge_runtime_rag_alignment')), '013_knowledge_runtime_rag_alignment migration must be recorded');
 
     // Test migration idempotency (second run succeeds)
     await runMigrations(pool);
     const recheckRes = await pool.query('SELECT name FROM _migrations ORDER BY id ASC');
-    assert.strictEqual(recheckRes.rows.length, 12, 'Second migration run should be idempotent with 12 migrations');
+    assert.strictEqual(recheckRes.rows.length, 13, 'Second migration run should be idempotent with 13 migrations');
   });
 
   it('2. Case-insensitive duplicate product code insertion rejected at DB level', async (t) => {

@@ -8,7 +8,10 @@ import {
   createRepositories,
   type Repositories,
 } from '../../packages/database/dist/index.js';
-import { AIOrchestrator } from '../../packages/ai-engine/dist/orchestrator.js';
+import {
+  AIOrchestrator,
+  MockEmbeddingProvider,
+} from '../../packages/ai-engine/dist/index.js';
 
 const { Pool } = pg;
 
@@ -282,35 +285,28 @@ describe('Stage 15: Real PostgreSQL + pgvector RAG & Business Truth Integration 
     });
     expiredKnowledgeId = k3.id;
 
-    // 4. Insert real 1536 dimension pgvector embeddings into knowledge_chunks
-    const embedding1536 = new Array(1536).fill(0).map((_, i) => Math.sin(i / 100) * 0.05);
-    const vectorStr = `[${embedding1536.join(',')}]`;
+    // 4. Insert real 1536 dimension pgvector embeddings via mockEmbeddingProvider
+    const mockEmb = new MockEmbeddingProvider();
+    const [chunkEmbApproved] = await mockEmb.embed(['TEST_STAGE15 Yetkazib berish shartlari']);
+    const [chunkEmbDraft] = await mockEmb.embed(['Barcha yangi mijozlarga 50% chegirma beriladi.']);
 
-    await pool.query(
-      `INSERT INTO knowledge_chunks (knowledge_item_id, chunk_index, content, language, embedding, metadata)
-       VALUES ($1, $2, $3, $4, $5::vector, $6)`,
-      [
-        approvedKnowledgeId,
-        0,
-        'LImax mahsulotlarini O‘zbekiston bo‘yicha 3 ish kunida yetkazib beradi.',
-        'uz',
-        vectorStr,
-        JSON.stringify({ source: 'DOC_DELIVERY_2026' }),
-      ]
-    );
+    await repos.knowledge.replaceChunks(approvedKnowledgeId, [
+      {
+        chunkIndex: 0,
+        content: 'LImax mahsulotlarini O‘zbekiston bo‘yicha 3 ish kunida yetkazib beradi.',
+        embedding: chunkEmbApproved,
+        metadata: { source: 'DOC_DELIVERY_2026' },
+      },
+    ]);
 
-    await pool.query(
-      `INSERT INTO knowledge_chunks (knowledge_item_id, chunk_index, content, language, embedding, metadata)
-       VALUES ($1, $2, $3, $4, $5::vector, $6)`,
-      [
-        draftKnowledgeId,
-        0,
-        'Barcha yangi mijozlarga 50% chegirma beriladi.',
-        'uz',
-        vectorStr,
-        JSON.stringify({ source: 'SECRET_DRAFT_2026' }),
-      ]
-    );
+    await repos.knowledge.replaceChunks(draftKnowledgeId, [
+      {
+        chunkIndex: 0,
+        content: 'Barcha yangi mijozlarga 50% chegirma beriladi.',
+        embedding: chunkEmbDraft,
+        metadata: { source: 'SECRET_DRAFT_2026' },
+      },
+    ]);
 
     assert.ok(approvedKnowledgeId);
     assert.ok(draftKnowledgeId);
@@ -320,7 +316,8 @@ describe('Stage 15: Real PostgreSQL + pgvector RAG & Business Truth Integration 
   it('3. Real pgvector cosine similarity retrieval filters DRAFT and retrieves only APPROVED items', async () => {
     if (!TEST_DB_URL) return;
 
-    const queryEmbedding = new Array(1536).fill(0).map((_, i) => Math.sin(i / 100) * 0.05);
+    const mockEmb = new MockEmbeddingProvider();
+    const [queryEmbedding] = await mockEmb.embed(['TEST_STAGE15 Yetkazib berish shartlari']);
     const queryVectorStr = `[${queryEmbedding.join(',')}]`;
 
     const result = await pool.query(

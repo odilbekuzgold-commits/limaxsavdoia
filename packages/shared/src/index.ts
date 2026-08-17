@@ -385,11 +385,32 @@ export const KnowledgeItemSchema = z.object({
   source: z.string().optional(),
   approvedBy: z.string().uuid().optional(),
   approvedAt: z.date().optional(),
+  validFrom: z.date().optional(),
   validUntil: z.date().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 export type KnowledgeItem = z.infer<typeof KnowledgeItemSchema>;
+
+export const CreateKnowledgeItemSchema = KnowledgeItemSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  status: KnowledgeStatusEnum.default('DRAFT'),
+});
+export type CreateKnowledgeItem = z.infer<typeof CreateKnowledgeItemSchema>;
+
+export interface KnowledgeSearchResult {
+  chunkId: string;
+  knowledgeItemId: string;
+  title: string;
+  content: string;
+  language: SupportedLanguage;
+  source?: string;
+  score: number;
+  metadata?: Record<string, unknown>;
+}
 
 export interface StructuredProductFact {
   id: string;
@@ -428,33 +449,21 @@ export interface KnowledgeSnippet {
 }
 
 export interface AIContext {
-  conversationId?: string;
   customerId?: string;
   customerName?: string;
+  conversationId?: string;
   preferredLanguage?: SupportedLanguage;
-  /** Explicit flag set by service layer: true on very first message of a conversation */
   isNewConversation?: boolean;
-  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  conversationHistory?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   availableProducts?: Product[];
-  /** APPROVED knowledge items only — injected by orchestrator before calling provider */
-  approvedKnowledgeItems?: Array<{ id: string; title: string; content: string }>;
-  /** Retrieved APPROVED RAG snippets passed directly to providers */
+  approvedKnowledgeItems?: KnowledgeSnippet[];
   knowledgeSnippets?: KnowledgeSnippet[];
-  /** Structured PostgreSQL business data (Priority 1 Truth) */
   structuredBusinessFacts?: StructuredBusinessFacts;
-  /** RAG source identifiers for citation / audit */
   ragSources?: string[];
+  retrievalMode?: 'pgvector' | 'memory-lexical' | 'none';
   lastResponse?: string;
 }
 
-export const CreateKnowledgeItemSchema = KnowledgeItemSchema.omit({
-  id: true,
-  approvedBy: true,
-  approvedAt: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export type CreateKnowledgeItem = z.infer<typeof CreateKnowledgeItemSchema>;
 
 // Telegram Business Connection
 export const TelegramBusinessConnectionSchema = z.object({

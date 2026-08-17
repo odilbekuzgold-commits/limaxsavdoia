@@ -2,7 +2,6 @@ import type {
   AIContext,
   AIStructuredResult,
   Product,
-  KnowledgeItem,
   Repositories,
   StructuredBusinessFacts,
   StructuredProductFact,
@@ -14,10 +13,13 @@ import { OpenAIProviderAdapter } from './providers/openai.provider.js';
 import { GeminiProviderAdapter } from './providers/gemini.provider.js';
 import { ClaudeProviderAdapter } from './providers/claude.provider.js';
 import { MockAIProviderAdapter } from './providers/mock.provider.js';
-import { KnowledgeRetriever } from './rag/retriever.js';
 import { loadBehaviorV2Config, type BehaviorV2Config } from './behavior.schema.js';
 import { getLocalizedTemplate } from './localization/templates.js';
 import { TemplateQARouter } from './templates/router.js';
+
+import type { EmbeddingProvider } from './embeddings/types.js';
+import { MockEmbeddingProvider } from './embeddings/mock.embedding.js';
+import { createEmbeddingProvider } from './embeddings/factory.js';
 
 export interface AIOrchestratorConfig {
   aiMode?: 'mock' | 'real';
@@ -27,6 +29,7 @@ export interface AIOrchestratorConfig {
   confidenceThreshold?: number;
   repos?: Repositories;
   behaviorConfig?: BehaviorV2Config;
+  embeddingProvider?: EmbeddingProvider;
 }
 
 export interface ProcessQueryOptions {
@@ -42,6 +45,7 @@ export class AIOrchestrator {
   private confidenceThreshold: number;
   private repos?: Repositories;
   private behaviorConfig: BehaviorV2Config;
+  private embeddingProvider: EmbeddingProvider;
 
   constructor(config?: AIOrchestratorConfig) {
     this.aiMode = config?.aiMode || (process.env.AI_MODE as 'mock' | 'real') || 'mock';
@@ -54,6 +58,7 @@ export class AIOrchestrator {
     this.confidenceThreshold = config?.confidenceThreshold || 0.65;
     this.repos = config?.repos;
     this.behaviorConfig = config?.behaviorConfig || loadBehaviorV2Config();
+    this.embeddingProvider = config?.embeddingProvider || (this.aiMode === 'mock' ? new MockEmbeddingProvider() : createEmbeddingProvider());
   }
 
   getBehaviorConfig(): BehaviorV2Config {
@@ -75,7 +80,7 @@ export class AIOrchestrator {
 
   async processQuery(
     prompt: string,
-    context: AIContext,
+    context: AIContext = {},
     options?: ProcessQueryOptions
   ): Promise<AIStructuredResult & { suppressAutoReply?: boolean }> {
     const repos = options?.repos || this.repos;
@@ -371,27 +376,58 @@ export class AIOrchestrator {
       }
     }
 
-    // 5. Approved Knowledge Base Retrieval (Priority 2)
-    let knowledgeItems: KnowledgeItem[] = [];
-    if (repos) {
-      const allKB = await repos.knowledge.findAll({});
-      const now = new Date();
-      // Strict: Only APPROVED and unexpired knowledge items
-      knowledgeItems = allKB.filter(
-        (k) => k.status === 'APPROVED' && (!k.validUntil || new Date(k.validUntil) > now)
+    // 5. Approved Knowledge Base Retrieval (Priority 2 — Real pgvector search)
+    let approvedKnowledgeSnippets: KnowledgeSnippet[] = [];
+    let retrievalMode: 'pgvector' | 'memory-lexical' | 'none' = 'none';
+
+    if (repos && repos.knowledge) {
+      const isPg = Boolean(
+        repos.knowledge.constructor &&
+        (repos.knowledge.constructor.name === 'PgKnowledgeRepository' ||
+         repos.knowledge.constructor.name.startsWith('Pg'))
       );
+
+      try {
+        const [queryEmbedding] = await this.embeddingProvider.embed([prompt]);
+
+        if (queryEmbedding && Array.isArray(queryEmbedding) && queryEmbedding.length === 1536) {
+          const searchResults = await repos.knowledge.searchSimilar(queryEmbedding, {
+            language: lang,
+            topK: 5,
+            minScore: 0.6,
+            now: new Date(),
+          });
+
+          retrievalMode = isPg ? 'pgvector' : 'memory-lexical';
+          approvedKnowledgeSnippets = searchResults.map((r) => ({
+            id: r.knowledgeItemId,
+            title: r.title,
+            content: r.content,
+            score: r.score,
+            source: r.source,
+          }));
+        }
+      } catch (_err: unknown) {
+        if (isPg) {
+          // STRICT RULE: If PostgreSQL vector search fails, DO NOT fallback to lexical! Safe manager handoff
+          const res = await this.formatAndRecordHandoff(
+            {
+              replyText: templates.unknownPrice(),
+              language: lang,
+              intent: 'knowledge_inquiry',
+              confidence: 0.2,
+              needsHandoff: true,
+              handoffReason: 'NO_RELIABLE_KNOWLEDGE',
+              leadSignals: {},
+              usedKnowledgeIds: [],
+            },
+            context,
+            repos
+          );
+          return this.enforceActionHonesty(res, options?.actionExecuted, templates);
+        }
+      }
     }
-
-    const retriever = new KnowledgeRetriever(knowledgeItems);
-    const ragResults = await retriever.retrieve(prompt, { language: lang, minScore: 0.6, topK: 5 });
-
-    const approvedKnowledgeSnippets: KnowledgeSnippet[] = ragResults.map((r) => ({
-      id: r.item.id,
-      title: r.item.title,
-      content: r.item.content,
-      score: r.score,
-      source: r.item.source,
-    }));
 
     const usedKnowledgeIds = approvedKnowledgeSnippets.map((s) => s.id);
 
@@ -403,10 +439,11 @@ export class AIOrchestrator {
       knowledgeSnippets: approvedKnowledgeSnippets,
       structuredBusinessFacts: structuredFacts,
       ragSources: approvedKnowledgeSnippets.map((s) => s.source || s.id),
+      retrievalMode,
     };
 
     // If query requires domain knowledge and nothing was retrieved -> handoff
-    if (knowledgeItems.length === 0 || ragResults.length === 0) {
+    if (approvedKnowledgeSnippets.length === 0) {
       if (lowerPrompt.includes('limax') || lowerPrompt.includes('siyosat') || lowerPrompt.includes('sertifikat') || lowerPrompt.includes('shartnoma')) {
         const res = await this.formatAndRecordHandoff(
           {

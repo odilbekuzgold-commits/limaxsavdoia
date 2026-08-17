@@ -22,6 +22,7 @@ import type {
   CreateAuditLog,
   KnowledgeItem,
   CreateKnowledgeItem,
+  KnowledgeSearchResult,
   SupportedLanguage,
   LeadTemperature,
   KnowledgeStatus,
@@ -136,6 +137,25 @@ export interface IKnowledgeRepository {
   findById(id: string): Promise<KnowledgeItem | null>;
   create(data: CreateKnowledgeItem): Promise<KnowledgeItem>;
   update(id: string, data: Partial<KnowledgeItem>): Promise<KnowledgeItem | null>;
+  searchSimilar(
+    embedding: number[],
+    options: {
+      language?: SupportedLanguage;
+      topK: number;
+      minScore: number;
+      now: Date;
+    }
+  ): Promise<KnowledgeSearchResult[]>;
+  replaceChunks(
+    knowledgeItemId: string,
+    chunks: Array<{
+      chunkIndex: number;
+      content: string;
+      language?: SupportedLanguage;
+      embedding?: number[];
+      metadata?: Record<string, unknown>;
+    }>
+  ): Promise<void>;
 }
 
 export interface ITelegramBusinessConnectionRepository {

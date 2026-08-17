@@ -5,6 +5,7 @@ import type {
   IKnowledgeRepository,
   SupportedLanguage,
   KnowledgeStatus,
+  KnowledgeSearchResult,
 } from '@limax/shared';
 
 export class PgKnowledgeRepository implements IKnowledgeRepository {
@@ -28,7 +29,7 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const dataResult = await this.pool.query<Record<string, unknown>>(
-      `SELECT id, title, content, language, status, source, approved_by, approved_at, created_at, updated_at FROM knowledge_items ${where} ORDER BY created_at DESC`,
+      `SELECT id, title, content, language, status, source, approved_by, approved_at, valid_from, valid_until, created_at, updated_at FROM knowledge_items ${where} ORDER BY created_at DESC`,
       values
     );
 
@@ -37,7 +38,7 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
 
   async findById(id: string): Promise<KnowledgeItem | null> {
     const result = await this.pool.query<Record<string, unknown>>(
-      'SELECT id, title, content, language, status, source, approved_by, approved_at, created_at, updated_at FROM knowledge_items WHERE id = $1',
+      'SELECT id, title, content, language, status, source, approved_by, approved_at, valid_from, valid_until, created_at, updated_at FROM knowledge_items WHERE id = $1',
       [id]
     );
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
@@ -45,8 +46,18 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
 
   async create(data: CreateKnowledgeItem): Promise<KnowledgeItem> {
     const result = await this.pool.query<Record<string, unknown>>(
-      `INSERT INTO knowledge_items (title, content, language, status, source) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, content, language, status, source, approved_by, approved_at, created_at, updated_at`,
-      [data.title, data.content, data.language || 'uz', data.status || 'draft', data.source || null]
+      `INSERT INTO knowledge_items (title, content, language, status, source, valid_from, valid_until)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, title, content, language, status, source, approved_by, approved_at, valid_from, valid_until, created_at, updated_at`,
+      [
+        data.title,
+        data.content,
+        data.language || 'uz',
+        data.status || 'DRAFT',
+        data.source || null,
+        data.validFrom || null,
+        data.validUntil || null,
+      ]
     );
     return this.mapRow(result.rows[0]);
   }
@@ -65,6 +76,8 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
       sets.push(`approved_by = $${idx++}`); values.push(data.approvedBy);
       sets.push(`approved_at = $${idx++}`); values.push(data.approvedBy ? new Date() : null);
     }
+    if (data.validFrom !== undefined) { sets.push(`valid_from = $${idx++}`); values.push(data.validFrom); }
+    if (data.validUntil !== undefined) { sets.push(`valid_until = $${idx++}`); values.push(data.validUntil); }
 
     if (sets.length === 0) return this.findById(id);
 
@@ -72,10 +85,146 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
     values.push(id);
 
     const result = await this.pool.query<Record<string, unknown>>(
-      `UPDATE knowledge_items SET ${sets.join(', ')} WHERE id = $${idx} RETURNING id, title, content, language, status, source, approved_by, approved_at, created_at, updated_at`,
+      `UPDATE knowledge_items SET ${sets.join(', ')} WHERE id = $${idx}
+       RETURNING id, title, content, language, status, source, approved_by, approved_at, valid_from, valid_until, created_at, updated_at`,
       values
     );
     return result.rows[0] ? this.mapRow(result.rows[0]) : null;
+  }
+
+  async searchSimilar(
+    embedding: number[],
+    options: {
+      language?: SupportedLanguage;
+      topK: number;
+      minScore: number;
+      now: Date;
+    }
+  ): Promise<KnowledgeSearchResult[]> {
+    // 1. Fail-fast embedding validation (exactly 1536 finite numbers)
+    if (!Array.isArray(embedding) || embedding.length !== 1536) {
+      throw new Error(`Invalid embedding dimension: expected exactly 1536 floats, got ${embedding?.length ?? 0}`);
+    }
+
+    for (let i = 0; i < embedding.length; i++) {
+      if (typeof embedding[i] !== 'number' || !Number.isFinite(embedding[i])) {
+        throw new Error(`Invalid embedding vector element at index ${i}: must be a finite number`);
+      }
+    }
+
+    const topK = Math.max(1, Math.min(10, options.topK || 5));
+    const minScore = typeof options.minScore === 'number' ? options.minScore : 0.6;
+    const now = options.now instanceof Date ? options.now : new Date();
+    const vectorStr = `[${embedding.join(',')}]`;
+
+    // 2. Query knowledge_chunks joined with knowledge_items
+    // Cosine similarity: 1 - (kc.embedding <=> $1::vector)
+    const query = `
+      SELECT
+        kc.id AS chunk_id,
+        ki.id AS knowledge_item_id,
+        ki.title,
+        kc.content,
+        ki.language,
+        ki.source,
+        (1 - (kc.embedding <=> $1::vector)) AS score,
+        kc.metadata
+      FROM knowledge_chunks kc
+      JOIN knowledge_items ki ON ki.id = kc.knowledge_item_id
+      WHERE ki.status = 'APPROVED'
+        AND (ki.valid_from IS NULL OR ki.valid_from <= $2)
+        AND (ki.valid_until IS NULL OR ki.valid_until > $2)
+        AND ($3::text IS NULL OR ki.language = $3)
+        AND kc.embedding IS NOT NULL
+        AND (1 - (kc.embedding <=> $1::vector)) >= $4
+      ORDER BY score DESC
+      LIMIT $5
+    `;
+
+    const result = await this.pool.query<Record<string, unknown>>(query, [
+      vectorStr,
+      now,
+      options.language || null,
+      minScore,
+      topK,
+    ]);
+
+    return result.rows.map((row) => ({
+      chunkId: row.chunk_id as string,
+      knowledgeItemId: row.knowledge_item_id as string,
+      title: row.title as string,
+      content: row.content as string,
+      language: row.language as SupportedLanguage,
+      source: (row.source as string) || undefined,
+      score: parseFloat(String(row.score)),
+      metadata: (row.metadata as Record<string, unknown>) || undefined,
+    }));
+  }
+
+  async replaceChunks(
+    knowledgeItemId: string,
+    chunks: Array<{
+      chunkIndex: number;
+      content: string;
+      language?: SupportedLanguage;
+      embedding?: number[];
+      metadata?: Record<string, unknown>;
+    }>
+  ): Promise<void> {
+    const isPool = 'connect' in this.pool && typeof this.pool.connect === 'function';
+    const client = isPool ? await (this.pool as pg.Pool).connect() : (this.pool as pg.PoolClient);
+    const shouldRelease = isPool;
+
+    try {
+      if (shouldRelease) {
+        await client.query('BEGIN');
+      }
+
+      // Delete existing chunks for this knowledge item
+      await client.query('DELETE FROM knowledge_chunks WHERE knowledge_item_id = $1', [knowledgeItemId]);
+
+      // Insert new chunks
+      for (const chunk of chunks) {
+        let vectorStr: string | null = null;
+        if (chunk.embedding && Array.isArray(chunk.embedding)) {
+          if (chunk.embedding.length !== 1536) {
+            throw new Error(`Chunk embedding must be exactly 1536 dimensions, got ${chunk.embedding.length}`);
+          }
+          for (let i = 0; i < chunk.embedding.length; i++) {
+            if (typeof chunk.embedding[i] !== 'number' || !Number.isFinite(chunk.embedding[i])) {
+              throw new Error(`Invalid chunk embedding value at index ${i}`);
+            }
+          }
+          vectorStr = `[${chunk.embedding.join(',')}]`;
+        }
+
+        await client.query(
+          `INSERT INTO knowledge_chunks (knowledge_item_id, chunk_index, content, language, embedding, metadata, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5::vector, $6, NOW(), NOW())`,
+          [
+            knowledgeItemId,
+            chunk.chunkIndex,
+            chunk.content,
+            chunk.language || 'uz',
+            vectorStr,
+            JSON.stringify(chunk.metadata || {}),
+          ]
+        );
+      }
+
+      if (shouldRelease) {
+        await client.query('COMMIT');
+      }
+    } catch (err) {
+      if (shouldRelease) {
+        await client.query('ROLLBACK');
+      }
+      throw err;
+    } finally {
+      if (shouldRelease) {
+        (client as pg.PoolClient).release();
+      }
+    }
   }
 
   private mapRow(row: Record<string, unknown>): KnowledgeItem {
@@ -88,6 +237,8 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
       source: row.source as string | undefined,
       approvedBy: row.approved_by as string | undefined,
       approvedAt: row.approved_at ? new Date(row.approved_at as string) : undefined,
+      validFrom: row.valid_from ? new Date(row.valid_from as string) : undefined,
+      validUntil: row.valid_until ? new Date(row.valid_until as string) : undefined,
       createdAt: new Date(row.created_at as string),
       updatedAt: new Date(row.updated_at as string),
     };

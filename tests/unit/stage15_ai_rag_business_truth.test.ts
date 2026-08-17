@@ -187,6 +187,20 @@ describe('Stage 15: AI + RAG + PostgreSQL Business Truth Unit Tests', () => {
         findById: async (id: string) => mockKnowledge.find((k) => k.id === id) || null,
         create: async () => ({} as any),
         update: async () => null,
+        searchSimilar: async (_embedding: number[], options: any) => {
+          const now = options?.now || new Date();
+          return mockKnowledge
+            .filter((k) => k.status === 'APPROVED' && (!k.validUntil || new Date(k.validUntil) > now))
+            .map((k) => ({
+              chunkId: `c-${k.id}`,
+              knowledgeItemId: k.id,
+              title: k.title,
+              content: k.content,
+              language: k.language,
+              score: 0.95,
+            }));
+        },
+        replaceChunks: async () => {},
       },
       handoffs: {
         create: async (data: any) => {

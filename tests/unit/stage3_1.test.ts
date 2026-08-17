@@ -183,7 +183,7 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
     );
   });
 
-  test('6. Dynamic runMigrations executes all 12 migrations (001–012)', async () => {
+  test('6. Dynamic runMigrations executes all 13 migrations (001–013)', async () => {
     const insertedMigrations: string[] = [];
 
     const mockClient = {
@@ -205,9 +205,9 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
 
     await runMigrations(mockPool);
 
-    assert.strictEqual(insertedMigrations.length, 12);
+    assert.strictEqual(insertedMigrations.length, 13);
     assert.strictEqual(insertedMigrations[0], '001_pgvector_extension');
-    assert.strictEqual(insertedMigrations[11], '012_product_prices_single_active');
+    assert.strictEqual(insertedMigrations[12], '013_knowledge_runtime_rag_alignment');
   });
 
   test('7. Mounted API Routers (Inventory, Pricing, Certificates, Media, Settings) factory verification', () => {
