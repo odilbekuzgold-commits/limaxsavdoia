@@ -347,6 +347,7 @@ export { GeminiEmbeddingProvider } from './embeddings/gemini.embedding.js';
 export { createEmbeddingProvider } from './embeddings/factory.js';
 export { chunkKnowledgeContent } from './rag/chunker.js';
 export { KnowledgeRetriever } from './rag/retriever.js';
+export * from './rag/index-audit.js';
 export { AIOrchestrator } from './orchestrator.js';
 export * from './behavior.schema.js';
 export * from './localization/templates.js';

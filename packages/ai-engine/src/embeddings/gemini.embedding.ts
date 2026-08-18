@@ -9,14 +9,14 @@ export interface GeminiEmbeddingConfig {
 
 export class GeminiEmbeddingProvider implements EmbeddingProvider {
   readonly providerName = 'gemini';
+  readonly modelName: string;
   private apiKey: string;
-  private model: string;
   private dimensions: number;
   private timeoutMs: number;
 
   constructor(config?: GeminiEmbeddingConfig) {
     this.apiKey = config?.apiKey || process.env.GEMINI_API_KEY || '';
-    this.model = config?.model || process.env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004';
+    this.modelName = config?.model || process.env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004';
     this.dimensions = config?.dimensions || 1536;
     this.timeoutMs = config?.timeoutMs || 10000;
   }
@@ -34,11 +34,12 @@ export class GeminiEmbeddingProvider implements EmbeddingProvider {
       const results: number[][] = [];
 
       for (const text of texts) {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:embedContent?key=${this.apiKey}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.modelName}:embedContent?key=${this.apiKey}`;
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            model: `models/${this.modelName}`,
             content: { parts: [{ text: text.slice(0, 8000) }] },
             outputDimensionality: this.dimensions,
           }),

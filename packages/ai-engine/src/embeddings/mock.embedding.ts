@@ -2,6 +2,7 @@ import type { EmbeddingProvider } from './types.js';
 
 export class MockEmbeddingProvider implements EmbeddingProvider {
   readonly providerName = 'mock';
+  readonly modelName = 'mock-1536';
 
   async embed(texts: string[]): Promise<number[][]> {
     return texts.map((text) => {

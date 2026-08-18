@@ -204,8 +204,8 @@ describe('Stage 15.2: Atomic Knowledge Approval & Lifecycle Unit Tests', () => {
     });
 
     let batchCallCount = 0;
-    // Mock the internal embedBatch
-    (provider as any).embedBatch = async (batch: string[]) => {
+    // Mock the internal batch execution
+    (provider as any).embedBatchWithRetry = async (batch: string[]) => {
       batchCallCount++;
       return batch.map(() => new Array(1536).fill(0.01));
     };

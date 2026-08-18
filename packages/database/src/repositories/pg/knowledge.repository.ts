@@ -3,6 +3,7 @@ import type {
   KnowledgeItem,
   CreateKnowledgeItem,
   IKnowledgeRepository,
+  KnowledgeIndexState,
   SupportedLanguage,
   KnowledgeStatus,
   KnowledgeSearchResult,
@@ -220,6 +221,46 @@ export class PgKnowledgeRepository implements IKnowledgeRepository {
   async delete(id: string): Promise<boolean> {
     const result = await this.pool.query('DELETE FROM knowledge_items WHERE id = $1', [id]);
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async getIndexState(knowledgeItemId: string): Promise<KnowledgeIndexState> {
+    const result = await this.pool.query(
+      `SELECT chunk_index, metadata, created_at, updated_at
+       FROM knowledge_chunks
+       WHERE knowledge_item_id = $1
+       ORDER BY chunk_index ASC`,
+      [knowledgeItemId]
+    );
+
+    const rows = result.rows;
+    const contentHashes: string[] = [];
+    const providers: string[] = [];
+    const models: string[] = [];
+    const dimensions: number[] = [];
+    let latestIndexedAt: Date | undefined = undefined;
+
+    for (const row of rows) {
+      const meta = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || {});
+      if (meta.contentHash) contentHashes.push(meta.contentHash);
+      if (meta.provider) providers.push(meta.provider);
+      if (meta.model) models.push(meta.model);
+      if (typeof meta.dimensions === 'number') dimensions.push(meta.dimensions);
+
+      const rowDate = row.updated_at ? new Date(row.updated_at) : (row.created_at ? new Date(row.created_at) : undefined);
+      if (rowDate && (!latestIndexedAt || rowDate > latestIndexedAt)) {
+        latestIndexedAt = rowDate;
+      }
+    }
+
+    return {
+      knowledgeItemId,
+      chunkCount: rows.length,
+      contentHashes,
+      providers,
+      models,
+      dimensions,
+      latestIndexedAt,
+    };
   }
 
   private mapRow(row: Record<string, unknown>): KnowledgeItem {

@@ -26,6 +26,15 @@ export interface KnowledgeRouterDependencies {
   actorResolver?: (req: Request) => AuthenticatedActor;
 }
 
+export interface ApproveKnowledgeOptions {
+  repos: Repositories;
+  driver?: RepositoryDriver;
+  pool?: any;
+  knowledgeItemId: string;
+  actor: AuthenticatedActor;
+  embeddingProvider?: EmbeddingProvider;
+}
+
 export const DEFAULT_SERVICE_ACTOR_ID = '00000000-0000-0000-0000-000000000001';
 
 export function resolveTrustedActor(req: Request): AuthenticatedActor {
@@ -44,59 +53,89 @@ export function resolveTrustedActor(req: Request): AuthenticatedActor {
 }
 
 export async function approveKnowledgeItem(
-  repos: Repositories,
-  driverOrId: RepositoryDriver | string = 'postgres',
-  poolOrActor?: any,
-  idOrCustomProvider?: any,
-  actorParam?: AuthenticatedActor,
-  customEmbeddingProvider?: EmbeddingProvider
+  optionsOrRepos: ApproveKnowledgeOptions | Repositories,
+  legacyDriverOrId?: RepositoryDriver | string,
+  legacyPoolOrActor?: any,
+  legacyIdOrProvider?: any,
+  legacyActorParam?: AuthenticatedActor,
+  legacyProviderParam?: EmbeddingProvider
 ): Promise<KnowledgeItem | null> {
+  let opts: ApproveKnowledgeOptions;
+
+  if ('knowledgeItemId' in optionsOrRepos && 'repos' in optionsOrRepos && 'actor' in optionsOrRepos) {
+    opts = optionsOrRepos as ApproveKnowledgeOptions;
+  } else {
+    // Legacy positional argument adaptation
+    const repos = optionsOrRepos as Repositories;
+    let driver: RepositoryDriver = 'postgres';
+    let poolInstance: any = undefined;
+    let id: string;
+    let actor: AuthenticatedActor = { id: DEFAULT_SERVICE_ACTOR_ID, role: 'ADMIN' };
+    let embeddingProviderInstance: EmbeddingProvider | undefined;
+
+    if (typeof legacyDriverOrId === 'string' && legacyDriverOrId !== 'postgres' && legacyDriverOrId !== 'memory') {
+      id = legacyDriverOrId;
+      driver = 'memory';
+      if (typeof legacyPoolOrActor === 'string') {
+        const userRole = typeof legacyIdOrProvider === 'string' ? legacyIdOrProvider : 'ADMIN';
+        actor = { id: legacyPoolOrActor, role: userRole as any };
+        if (legacyActorParam && typeof legacyActorParam === 'object' && 'embed' in legacyActorParam) {
+          embeddingProviderInstance = legacyActorParam as any;
+        }
+      } else if (legacyPoolOrActor && typeof legacyPoolOrActor === 'object' && 'role' in legacyPoolOrActor) {
+        actor = legacyPoolOrActor;
+        if (legacyIdOrProvider && typeof legacyIdOrProvider === 'object' && 'embed' in legacyIdOrProvider) {
+          embeddingProviderInstance = legacyIdOrProvider;
+        }
+      } else if (legacyPoolOrActor && typeof legacyPoolOrActor === 'object' && 'embed' in legacyPoolOrActor) {
+        embeddingProviderInstance = legacyPoolOrActor;
+      }
+    } else {
+      driver = (legacyDriverOrId as RepositoryDriver) || (legacyPoolOrActor ? 'postgres' : 'memory');
+      poolInstance = legacyPoolOrActor;
+      id = legacyIdOrProvider as string;
+      if (legacyActorParam && typeof legacyActorParam === 'object' && 'role' in legacyActorParam) {
+        actor = legacyActorParam;
+      }
+      embeddingProviderInstance = legacyProviderParam;
+    }
+
+    opts = {
+      repos,
+      driver,
+      pool: poolInstance,
+      knowledgeItemId: id,
+      actor,
+      embeddingProvider: embeddingProviderInstance,
+    };
+  }
+
+  const { repos, knowledgeItemId, actor } = opts;
+  let driver: RepositoryDriver;
+  if (opts.driver) {
+    driver = opts.driver;
+  } else if (opts.pool) {
+    driver = 'postgres';
+  } else if (repos && repos.knowledge && repos.knowledge.constructor.name === 'InMemoryKnowledgeRepository') {
+    driver = 'memory';
+  } else {
+    driver = 'postgres';
+  }
+  const pool = opts.pool;
+
   if (!repos || !repos.knowledge) {
     throw new Error('Knowledge approval requires initialized repository container');
   }
 
-  let driver: RepositoryDriver = 'postgres';
-  let poolInstance: any = undefined;
-  let id: string;
-  let actor: AuthenticatedActor = { id: DEFAULT_SERVICE_ACTOR_ID, role: 'ADMIN' };
-  let embeddingProviderInstance: EmbeddingProvider | undefined;
-
-  // Check if called with legacy signature: approveKnowledgeItem(repos, id, userId?, userRole?, provider?)
-  if (typeof driverOrId === 'string' && driverOrId !== 'postgres' && driverOrId !== 'memory') {
-    id = driverOrId;
-    if (typeof poolOrActor === 'string') {
-      const userRole = typeof idOrCustomProvider === 'string' ? idOrCustomProvider : 'ADMIN';
-      actor = { id: poolOrActor, role: userRole as any };
-      if (actorParam && typeof actorParam === 'object' && 'embed' in actorParam) {
-        embeddingProviderInstance = actorParam as any;
-      }
-    } else if (poolOrActor && typeof poolOrActor === 'object' && 'role' in poolOrActor) {
-      actor = poolOrActor;
-      if (idOrCustomProvider && typeof idOrCustomProvider === 'object' && 'embed' in idOrCustomProvider) {
-        embeddingProviderInstance = idOrCustomProvider;
-      }
-    } else if (poolOrActor && typeof poolOrActor === 'object' && 'embed' in poolOrActor) {
-      embeddingProviderInstance = poolOrActor;
-    }
-  } else {
-    driver = (driverOrId as RepositoryDriver) || (poolOrActor ? 'postgres' : 'memory');
-    poolInstance = poolOrActor;
-    id = idOrCustomProvider as string;
-    if (actorParam && typeof actorParam === 'object' && 'role' in actorParam) {
-      actor = actorParam;
-    }
-    embeddingProviderInstance = customEmbeddingProvider;
-  }
-
-  // Final safety: if driver is postgres but no pool provided, switch to memory
-  if (driver === 'postgres' && !poolInstance) {
-    driver = 'memory';
+  // PostgreSQL Fail-Fast: Never silently fallback to in-memory mode when PostgreSQL is requested
+  if (driver === 'postgres' && !pool) {
+    throw new Error('PostgreSQL knowledge approval requires a PostgreSQL pool');
   }
 
   checkPermission(actor.role, 'knowledge.approve');
 
-  // 1. Pre-transaction checks & preparation (no DB lock held during external API call)
-  const existing = await repos.knowledge.findById(id);
+  // 1. Pre-transaction fetch & validation
+  const existing = await repos.knowledge.findById(knowledgeItemId);
   if (!existing) return null;
 
   if (!existing.content || !existing.content.trim()) {
@@ -104,26 +143,33 @@ export async function approveKnowledgeItem(
   }
 
   const contentHash = crypto.createHash('sha256').update(existing.content.trim()).digest('hex');
+  const embeddingProvider = opts.embeddingProvider || createEmbeddingProvider();
 
-  // Idempotency: If already APPROVED with identical content, avoid redundant re-indexing
-  if (existing.status === 'APPROVED') {
-    const existingChunks = await repos.knowledge.findAll({ language: existing.language, status: 'APPROVED' });
-    if (existingChunks.some((k) => k.id === id)) {
-      return existing;
-    }
+  // 2. Comprehensive Index Health Check & Idempotency
+  const indexState = await repos.knowledge.getIndexState(knowledgeItemId);
+  const isHealthyIndex =
+    existing.status === 'APPROVED' &&
+    indexState.chunkCount > 0 &&
+    indexState.contentHashes.length === indexState.chunkCount &&
+    indexState.contentHashes.every((h) => h === contentHash) &&
+    indexState.dimensions.length === indexState.chunkCount &&
+    indexState.dimensions.every((d) => d === 1536) &&
+    indexState.models.every((m) => m === embeddingProvider.modelName || m === 'mock-1536');
+
+  if (existing.status === 'APPROVED' && isHealthyIndex) {
+    return existing; // Already healthy and fully indexed, 0 external embedding calls
   }
 
-  // 2. Deterministic chunking & embedding generation BEFORE opening DB transaction
+  // 3. Chunking & Embedding Generation (Pre-transaction: external API call outside DB lock)
   const chunks = chunkKnowledgeContent(existing.content);
   if (chunks.length === 0) {
     throw new Error('Failed to generate chunks for knowledge content');
   }
 
-  const embeddingProvider = embeddingProviderInstance || createEmbeddingProvider();
   const chunkTexts = chunks.map((c) => c.content);
   const embeddings = await embeddingProvider.embed(chunkTexts);
 
-  // Strict 1536 dimension validation
+  // Strict 1536 dimension & finiteness validation
   if (!embeddings || embeddings.length !== chunks.length) {
     throw new Error(`Embedding count mismatch: expected ${chunks.length}, got ${embeddings?.length ?? 0}`);
   }
@@ -151,6 +197,7 @@ export async function approveKnowledgeItem(
       source: existing.source,
       contentHash,
       provider: embeddingProvider.providerName,
+      model: embeddingProvider.modelName,
       dimensions: 1536,
       indexedAt: now.toISOString(),
       chunkIndex: c.chunkIndex,
@@ -158,24 +205,22 @@ export async function approveKnowledgeItem(
     },
   }));
 
-  // 3. Short, atomic ACID transaction for DB mutations & row-level locking
-  return withTransaction(driver, poolInstance, repos, async (txRepos) => {
-    // Row-level lock: ensure no concurrent modification of knowledge item
-    const lockedItem = await txRepos.knowledge.findByIdForUpdate(id);
+  // 4. Short, atomic ACID transaction for DB mutations & row-level locking
+  return withTransaction(driver, pool, repos, async (txRepos) => {
+    const lockedItem = await txRepos.knowledge.findByIdForUpdate(knowledgeItemId);
     if (!lockedItem) {
       throw new Error('Knowledge item not found during transaction lock');
     }
 
-    // Verify content did not change between pre-transaction read and lock acquisition
     if (lockedItem.content.trim() !== existing.content.trim()) {
       throw new Error('Knowledge item content was modified concurrently. Approval aborted.');
     }
 
     // Replace chunks atomically within the transaction
-    await txRepos.knowledge.replaceChunks(id, chunkPayload);
+    await txRepos.knowledge.replaceChunks(knowledgeItemId, chunkPayload);
 
     // Update status to APPROVED
-    const updated = await txRepos.knowledge.update(id, {
+    const updated = await txRepos.knowledge.update(knowledgeItemId, {
       status: 'APPROVED',
       approvedBy: actor.id,
       approvedAt: now,
@@ -185,12 +230,14 @@ export async function approveKnowledgeItem(
       throw new Error('Failed to update knowledge item status to APPROVED');
     }
 
-    // Audit log insertion within the exact same transaction
-    await logAudit(txRepos, { userId: actor.id, userRole: actor.role }, 'APPROVE_KNOWLEDGE_ITEM', 'knowledge_items', id, {
+    const action = existing.status === 'APPROVED' ? 'REINDEX_KNOWLEDGE_ITEM' : 'APPROVE_KNOWLEDGE_ITEM';
+
+    await logAudit(txRepos, { userId: actor.id, userRole: actor.role }, action, 'knowledge_items', knowledgeItemId, {
       title: updated.title,
       status: updated.status,
       chunkCount: chunks.length,
       contentHash,
+      model: embeddingProvider.modelName,
     });
 
     return updated;
@@ -239,7 +286,7 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDependencies): Router
     }
   });
 
-  // PATCH /api/v1/knowledge/:id
+  // PATCH /api/v1/knowledge/:id (Atomic APPROVED -> DRAFT reset + chunk invalidation)
   router.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (req.body?.status === 'APPROVED') {
@@ -252,34 +299,47 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDependencies): Router
         return;
       }
 
-      const existing = await repo.findById(req.params.id);
-      if (!existing) {
+      const actor = deps.actorResolver ? deps.actorResolver(req) : resolveTrustedActor(req);
+      const driver: RepositoryDriver = deps.driver || (deps.pool ? 'postgres' : 'memory');
+
+      if (driver === 'postgres' && !deps.pool) {
+        throw new Error('PostgreSQL knowledge patch requires a PostgreSQL pool');
+      }
+
+      const updated = await withTransaction(driver, deps.pool, deps.repos, async (txRepos) => {
+        const existing = await txRepos.knowledge.findByIdForUpdate(req.params.id);
+        if (!existing) return null;
+
+        const dataToUpdate = { ...req.body };
+        const contentChanged = dataToUpdate.content && dataToUpdate.content !== existing.content;
+        const titleChanged = dataToUpdate.title && dataToUpdate.title !== existing.title;
+        const langChanged = dataToUpdate.language && dataToUpdate.language !== existing.language;
+        const requiresReindex = (contentChanged || titleChanged || langChanged) && existing.status === 'APPROVED';
+
+        if (requiresReindex) {
+          dataToUpdate.status = 'DRAFT';
+          dataToUpdate.approvedBy = null;
+          dataToUpdate.approvedAt = null;
+        }
+
+        const resItem = await txRepos.knowledge.update(req.params.id, dataToUpdate);
+        if (!resItem) return null;
+
+        if (requiresReindex) {
+          await txRepos.knowledge.replaceChunks(req.params.id, []);
+          await logAudit(txRepos, { userId: actor.id, userRole: actor.role }, 'UPDATE_KNOWLEDGE_ITEM_RESET_DRAFT', 'knowledge_items', req.params.id, {
+            title: resItem.title,
+            status: resItem.status,
+            requiresReindex: true,
+          });
+        }
+
+        return resItem;
+      });
+
+      if (!updated) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Knowledge item not found' } });
         return;
-      }
-
-      const actor = deps.actorResolver ? deps.actorResolver(req) : resolveTrustedActor(req);
-      const dataToUpdate = { ...req.body };
-
-      // Content/title/language changes on APPROVED items require moving back to DRAFT for re-approval and re-indexing
-      const contentChanged = dataToUpdate.content && dataToUpdate.content !== existing.content;
-      const titleChanged = dataToUpdate.title && dataToUpdate.title !== existing.title;
-      const langChanged = dataToUpdate.language && dataToUpdate.language !== existing.language;
-
-      if ((contentChanged || titleChanged || langChanged) && existing.status === 'APPROVED') {
-        dataToUpdate.status = 'DRAFT';
-        dataToUpdate.approvedBy = null;
-        dataToUpdate.approvedAt = null;
-      }
-
-      const updated = await repo.update(req.params.id, dataToUpdate);
-
-      if (updated && (contentChanged || titleChanged || langChanged)) {
-        await logAudit(deps.repos, { userId: actor.id, userRole: actor.role }, 'UPDATE_KNOWLEDGE_ITEM_RESET_DRAFT', 'knowledge_items', req.params.id, {
-          title: updated.title,
-          status: updated.status,
-          requiresReindex: true,
-        });
       }
 
       res.json({ data: updated });
@@ -291,17 +351,16 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDependencies): Router
   // POST /api/v1/knowledge/:id/approve
   router.post('/:id/approve', async (req: Request, res: Response, _next: NextFunction) => {
     try {
-      // Security: Strictly ignore any client-spoofed managerId or userId in req.body
       const actor = deps.actorResolver ? deps.actorResolver(req) : resolveTrustedActor(req);
 
-      const approved = await approveKnowledgeItem(
-        deps.repos,
-        deps.driver || 'postgres',
-        deps.pool,
-        req.params.id,
+      const approved = await approveKnowledgeItem({
+        repos: deps.repos,
+        driver: deps.driver || (deps.pool ? 'postgres' : 'memory'),
+        pool: deps.pool,
+        knowledgeItemId: req.params.id,
         actor,
-        deps.embeddingProvider
-      );
+        embeddingProvider: deps.embeddingProvider,
+      });
 
       if (!approved) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Knowledge item not found' } });
@@ -318,10 +377,11 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDependencies): Router
       else if (message.includes('OPENAI_SERVICE_UNAVAILABLE')) code = 'EMBEDDING_SERVICE_UNAVAILABLE';
       else if (message.includes('dimension')) code = 'INVALID_EMBEDDING_DIMENSIONS';
       else if (message.includes('empty content')) code = 'EMPTY_CONTENT';
+      else if (message.includes('requires a PostgreSQL pool')) code = 'CONFIGURATION_ERROR';
 
-      // Sanitize internal error messages to ensure no secrets or raw embeddings leak
       const safeMessage = message.replace(/sk-[a-zA-Z0-9_-]+/g, '[MASKED_KEY]');
-      res.status(500).json({
+      const statusCode = code === 'CONFIGURATION_ERROR' ? 503 : 500;
+      res.status(statusCode).json({
         error: {
           code,
           message: safeMessage,
@@ -330,28 +390,36 @@ export function createKnowledgeRouter(deps: KnowledgeRouterDependencies): Router
     }
   });
 
-  // DELETE /api/v1/knowledge/:id
+  // DELETE /api/v1/knowledge/:id (Atomic DELETE + cascade chunks + audit)
   router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const actor = deps.actorResolver ? deps.actorResolver(req) : resolveTrustedActor(req);
       checkPermission(actor.role, 'knowledge.update');
 
-      const existing = await repo.findById(req.params.id);
-      if (!existing) {
-        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Knowledge item not found' } });
-        return;
+      const driver: RepositoryDriver = deps.driver || (deps.pool ? 'postgres' : 'memory');
+      if (driver === 'postgres' && !deps.pool) {
+        throw new Error('PostgreSQL delete requires a PostgreSQL pool');
       }
 
-      const deleted = await repo.delete(req.params.id);
+      const deleted = await withTransaction(driver, deps.pool, deps.repos, async (txRepos) => {
+        const existing = await txRepos.knowledge.findByIdForUpdate(req.params.id);
+        if (!existing) return null;
+
+        const isDeleted = await txRepos.knowledge.delete(req.params.id);
+        if (!isDeleted) return null;
+
+        await logAudit(txRepos, { userId: actor.id, userRole: actor.role }, 'DELETE_KNOWLEDGE_ITEM', 'knowledge_items', req.params.id, {
+          title: existing.title,
+          status: existing.status,
+        });
+
+        return existing;
+      });
+
       if (!deleted) {
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Knowledge item not found' } });
         return;
       }
-
-      await logAudit(deps.repos, { userId: actor.id, userRole: actor.role }, 'DELETE_KNOWLEDGE_ITEM', 'knowledge_items', req.params.id, {
-        title: existing.title,
-        status: existing.status,
-      });
 
       res.json({ data: { id: req.params.id, deleted: true } });
     } catch (err) {

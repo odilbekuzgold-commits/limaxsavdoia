@@ -132,6 +132,16 @@ export interface IAuditLogRepository {
   findAll(params: { page: number; limit: number; entity?: string }): Promise<PaginatedResult<AuditLog>>;
 }
 
+export interface KnowledgeIndexState {
+  knowledgeItemId: string;
+  chunkCount: number;
+  contentHashes: string[];
+  providers: string[];
+  models: string[];
+  dimensions: number[];
+  latestIndexedAt?: Date;
+}
+
 export interface IKnowledgeRepository {
   findAll(params: { language?: SupportedLanguage; status?: KnowledgeStatus }): Promise<KnowledgeItem[]>;
   findById(id: string): Promise<KnowledgeItem | null>;
@@ -158,6 +168,7 @@ export interface IKnowledgeRepository {
     }>
   ): Promise<void>;
   delete(id: string): Promise<boolean>;
+  getIndexState(knowledgeItemId: string): Promise<KnowledgeIndexState>;
 }
 
 export interface ITelegramBusinessConnectionRepository {

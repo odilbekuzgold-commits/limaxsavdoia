@@ -6,6 +6,7 @@ import type {
   KnowledgeStatus,
   IKnowledgeRepository,
   KnowledgeSearchResult,
+  KnowledgeIndexState,
 } from '@limax/shared';
 
 interface StoredChunk {
@@ -174,6 +175,32 @@ export class InMemoryKnowledgeRepository implements IKnowledgeRepository {
     const existed = this.db.delete(id);
     this.chunkDb.delete(id);
     return existed;
+  }
+
+  async getIndexState(knowledgeItemId: string): Promise<KnowledgeIndexState> {
+    const chunks = this.chunkDb.get(knowledgeItemId) || [];
+    const contentHashes: string[] = [];
+    const providers: string[] = [];
+    const models: string[] = [];
+    const dimensions: number[] = [];
+
+    for (const c of chunks) {
+      const meta = c.metadata || {};
+      if (meta.contentHash) contentHashes.push(meta.contentHash as string);
+      if (meta.provider) providers.push(meta.provider as string);
+      if (meta.model) models.push(meta.model as string);
+      if (typeof meta.dimensions === 'number') dimensions.push(meta.dimensions);
+      else if (c.embedding) dimensions.push(c.embedding.length);
+    }
+
+    return {
+      knowledgeItemId,
+      chunkCount: chunks.length,
+      contentHashes,
+      providers,
+      models,
+      dimensions,
+    };
   }
 
   seed(item: KnowledgeItem): void {
