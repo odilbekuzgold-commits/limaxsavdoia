@@ -61,7 +61,9 @@ export class InMemoryProductInventoryRepository implements IProductInventoryRepo
       throw new Error('reservedQuantity cannot exceed availableQuantity');
     }
 
-    const derivedStatus = avail <= 0 || netAvailable <= 0 ? 'OUT_OF_STOCK' : (data.status || existing?.status || 'IN_STOCK');
+    const derivedStatus = data.status === 'UNKNOWN'
+      ? 'UNKNOWN'
+      : (avail <= 0 || netAvailable <= 0 ? 'OUT_OF_STOCK' : (data.status || existing?.status || 'IN_STOCK'));
     const newVersion = existing ? (existing.version || 1) + 1 : 1;
 
     const item: ProductInventory = {

@@ -37,8 +37,10 @@ export class PgProductInventoryRepository implements IProductInventoryRepository
     const resQty = data.reservedQuantity !== undefined ? data.reservedQuantity : existing?.reservedQuantity ?? 0;
     const netAvailable = avail - resQty;
 
-    // Derived status truth: zero available or net-zero/negative net available MUST be OUT_OF_STOCK
-    const derivedStatus = avail <= 0 || netAvailable <= 0 ? 'OUT_OF_STOCK' : (data.status || existing?.status || 'IN_STOCK');
+    // Derived status truth: explicit UNKNOWN status is preserved, otherwise zero available or net-zero MUST be OUT_OF_STOCK
+    const derivedStatus = data.status === 'UNKNOWN'
+      ? 'UNKNOWN'
+      : (avail <= 0 || netAvailable <= 0 ? 'OUT_OF_STOCK' : (data.status || existing?.status || 'IN_STOCK'));
     const wh = data.warehouse !== undefined ? data.warehouse : (existing?.warehouse ?? '');
 
     if (existing) {

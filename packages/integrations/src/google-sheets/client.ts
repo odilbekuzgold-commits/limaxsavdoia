@@ -107,6 +107,18 @@ export class GoogleSheetsClient {
     return data.values || [];
   }
 
+  getSpreadsheetId(): string {
+    return this.spreadsheetId;
+  }
+
+  async fetchTabs(tabNames: ('Products' | 'Prices' | 'Inventory' | 'Sync_Control' | string)[]): Promise<Record<string, string[][]>> {
+    const result: Record<string, string[][]> = {};
+    for (const name of tabNames) {
+      result[name] = await this.readTab(name as any);
+    }
+    return result;
+  }
+
   async readAllTabs(): Promise<{
     products: string[][];
     prices: string[][];

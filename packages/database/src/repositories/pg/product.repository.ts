@@ -48,7 +48,7 @@ export class PgProductRepository implements IProductRepository {
         data.name,
         data.code || null,
         data.category,
-        data.description || null,
+        data.description || '',
         data.price,
         data.currency || 'USD',
         data.minimumOrder ?? 1,

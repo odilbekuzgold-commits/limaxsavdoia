@@ -34,6 +34,8 @@ export interface SyncResult {
     pricesCreated?: number;
     pricesUnchanged?: number;
     inventoryUpdated?: number;
+    skippedPending?: number;
+    skippedDisabled?: number;
   };
   errors?: string[];
   lastSuccessAt?: Date | null;
@@ -51,20 +53,55 @@ export class GoogleSheetsSyncEngine {
     rawRows: string[][],
     schema: { parse: (val: unknown) => T },
     fieldMapping: Record<string, number>
-  ): { valid: T[]; errors: string[] } {
+  ): { valid: T[]; errors: string[]; skippedPending: number; skippedDisabled: number } {
     if (!rawRows || rawRows.length <= 1) {
-      return { valid: [], errors: [] };
+      return { valid: [], errors: [], skippedPending: 0, skippedDisabled: 0 };
     }
 
-    const headers = rawRows[0].map((h) => h.trim().toLowerCase());
+    const normalizeHeader = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normHeaders = rawRows[0].map(normalizeHeader);
+    const hasHeaders = normHeaders.some((h) => h.includes('code') || h.includes('status') || h.includes('name'));
+
+    const findCol = (key: string): number => {
+      const normKey = normalizeHeader(key);
+      const exactIdx = normHeaders.findIndex((h) => h === normKey);
+      if (exactIdx >= 0) return exactIdx;
+
+      const partialIdx = normHeaders.findIndex((h) => (h.length > 2 && normKey.includes(h)) || (normKey.length > 2 && h.includes(normKey)));
+      if (partialIdx >= 0) return partialIdx;
+
+      if (normKey === 'minorderquantity') {
+        const idx = normHeaders.findIndex((h) => h.includes('minorder') || h.includes('minimumorder') || h.includes('moq'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'availablequantity') {
+        const idx = normHeaders.findIndex((h) => h.includes('avail') || h.includes('available'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'reservedquantity') {
+        const idx = normHeaders.findIndex((h) => h.includes('res') || h.includes('reserved'));
+        if (idx >= 0) return idx;
+      }
+
+      return -1;
+    };
+
     const map: Record<string, number> = {};
     for (const [key, fallbackIdx] of Object.entries(fieldMapping)) {
-      const foundIdx = headers.findIndex((h) => h.includes(key.toLowerCase()));
-      map[key] = foundIdx >= 0 ? foundIdx : fallbackIdx;
+      const foundIdx = findCol(key);
+      if (foundIdx >= 0) {
+        map[key] = foundIdx;
+      } else if (hasHeaders) {
+        map[key] = -1;
+      } else {
+        map[key] = fallbackIdx;
+      }
     }
 
     const valid: T[] = [];
     const errors: string[] = [];
+    let skippedPending = 0;
+    let skippedDisabled = 0;
 
     for (let i = 1; i < rawRows.length; i++) {
       const row = rawRows[i];
@@ -72,80 +109,129 @@ export class GoogleSheetsSyncEngine {
 
       const rowObj: Record<string, unknown> = { rowNumber: i + 1 };
       for (const [key, colIdx] of Object.entries(map)) {
-        rowObj[key] = row[colIdx] !== undefined ? row[colIdx].trim() : '';
+        rowObj[key] = colIdx >= 0 && row[colIdx] !== undefined ? row[colIdx].trim() : '';
       }
 
       try {
         const parsed = schema.parse(rowObj);
+        const item = parsed as any;
+        if (item.approvalStatus !== 'APPROVED') {
+          skippedPending++;
+        } else if (!item.syncEnabled) {
+          skippedDisabled++;
+        }
         valid.push(parsed);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        errors.push(`Row ${i + 1}: ${msg}`);
+        errors.push(`Row ${i + 1} validation failed: ${msg}`);
       }
     }
 
-    return { valid, errors };
+    return { valid, errors, skippedPending, skippedDisabled };
   }
 
   async runSync(options: SyncOptions = {}): Promise<SyncResult> {
-    const dryRun = Boolean(options.dryRun);
+    const dryRun = options.dryRun ?? false;
 
-    // 1. Read all 4 tabs from Google Sheets
-    const rawTabs = await this.client.readAllTabs();
+    // Fail-fast if invalid spreadsheet ID configured
+    if (this.client.getSpreadsheetId() !== REQUIRED_SPREADSHEET_ID) {
+      return {
+        success: false,
+        spreadsheetId: this.client.getSpreadsheetId(),
+        dryRun,
+        status: 'FAILED',
+        checksum: '',
+        counts: { products: 0, prices: 0, inventory: 0 },
+        errors: [`Invalid Spreadsheet ID. Required: ${REQUIRED_SPREADSHEET_ID}`],
+      };
+    }
+
+    // 1. Fetch tabs
+    let tabData: { Products?: string[][]; Prices?: string[][]; Inventory?: string[][]; Sync_Control?: string[][] };
+    try {
+      tabData = await this.client.fetchTabs(['Products', 'Prices', 'Inventory', 'Sync_Control']);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        spreadsheetId: REQUIRED_SPREADSHEET_ID,
+        dryRun,
+        status: 'FAILED',
+        checksum: '',
+        counts: { products: 0, prices: 0, inventory: 0 },
+        errors: [`Failed to read Google Sheets tabs: ${msg}`],
+      };
+    }
 
     // 2. Parse Products Tab
-    const productFieldMap = {
-      productCode: 0,
-      productName: 1,
-      category: 2,
-      description: 3,
-      unit: 4,
-      active: 5,
-      approvalStatus: 6,
-      syncEnabled: 7,
-      notes: 8,
-    };
-    const parsedProducts = this.parseRows<SheetProductRow>(rawTabs.products, SheetProductRowSchema, productFieldMap);
+    const productParsed = this.parseRows<SheetProductRow>(
+      tabData.Products || [],
+      SheetProductRowSchema,
+      {
+        productCode: 0,
+        productName: 1,
+        category: 2,
+        color: 3,
+        yarnType: 4,
+        count: 5,
+        composition: 6,
+        description: 7,
+        unit: 8,
+        active: 9,
+        approvalStatus: 10,
+        syncEnabled: 11,
+        notes: 12,
+      }
+    );
 
     // 3. Parse Prices Tab
-    const priceFieldMap = {
-      productCode: 0,
-      paymentType: 1,
-      amount: 2,
-      currency: 3,
-      unit: 4,
-      minOrderQuantity: 5,
-      approvalStatus: 6,
-      syncEnabled: 7,
-      notes: 8,
-    };
-    const parsedPrices = this.parseRows<SheetPriceRow>(rawTabs.prices, SheetPriceRowSchema, priceFieldMap);
+    const priceParsed = this.parseRows<SheetPriceRow>(
+      tabData.Prices || [],
+      SheetPriceRowSchema,
+      {
+        productCode: 0,
+        paymentType: 1,
+        amount: 2,
+        currency: 3,
+        unit: 4,
+        minOrderQuantity: 5,
+        approvalStatus: 6,
+        syncEnabled: 7,
+        notes: 8,
+      }
+    );
 
     // 4. Parse Inventory Tab
-    const inventoryFieldMap = {
-      productCode: 0,
-      availableQuantity: 1,
-      reservedQuantity: 2,
-      unit: 3,
-      warehouse: 4,
-      approvalStatus: 5,
-      syncEnabled: 6,
-      notes: 7,
-    };
-    const parsedInventory = this.parseRows<SheetInventoryRow>(rawTabs.inventory, SheetInventoryRowSchema, inventoryFieldMap);
+    const inventoryParsed = this.parseRows<SheetInventoryRow>(
+      tabData.Inventory || [],
+      SheetInventoryRowSchema,
+      {
+        productCode: 0,
+        availableQuantity: 1,
+        reservedQuantity: 2,
+        unit: 3,
+        warehouse: 4,
+        approvalStatus: 5,
+        syncEnabled: 6,
+        notes: 7,
+      }
+    );
 
     const allErrors = [
-      ...parsedProducts.errors,
-      ...parsedPrices.errors,
-      ...parsedInventory.errors,
+      ...productParsed.errors,
+      ...priceParsed.errors,
+      ...inventoryParsed.errors,
     ];
 
-    // Filter only APPROVED and syncEnabled = true
-    const approvedProducts = parsedProducts.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
-    const approvedPrices = parsedPrices.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
-    const approvedInventory = parsedInventory.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+    const totalSkippedPending = productParsed.skippedPending + priceParsed.skippedPending + inventoryParsed.skippedPending;
+    const totalSkippedDisabled = productParsed.skippedDisabled + priceParsed.skippedDisabled + inventoryParsed.skippedDisabled;
 
-    // Duplicate productCode validation
+    // Filter strictly for APPROVED and syncEnabled = true
+    const approvedProducts = productParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+    const approvedPrices = priceParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+    const approvedInventory = inventoryParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+
+    // Check duplicate productCode in approvedProducts
     const codeCounts = new Map<string, number>();
     for (const p of approvedProducts) {
       const c = p.productCode.toUpperCase();
@@ -185,15 +271,38 @@ export class GoogleSheetsSyncEngine {
           prices: approvedPrices.length,
           inventory: approvedInventory.length,
         },
+        details: {
+          skippedPending: totalSkippedPending,
+          skippedDisabled: totalSkippedDisabled,
+        },
         errors: allErrors,
       };
     }
 
     // 5. Calculate Checksum
     const payloadForChecksum = JSON.stringify({
-      products: approvedProducts.map((p) => ({ code: p.productCode, name: p.productName, active: p.active, category: p.category })),
-      prices: approvedPrices.map((pr) => ({ code: pr.productCode, type: pr.paymentType, amount: pr.amount, currency: pr.currency })),
-      inventory: approvedInventory.map((inv) => ({ code: inv.productCode, avail: inv.availableQuantity, res: inv.reservedQuantity })),
+      products: approvedProducts.map((p) => ({
+        code: p.productCode,
+        name: p.productName,
+        active: p.active,
+        category: p.category,
+        color: p.color,
+        yarnType: p.yarnType,
+        count: p.count,
+        composition: p.composition,
+      })),
+      prices: approvedPrices.map((pr) => ({
+        code: pr.productCode,
+        type: pr.paymentType,
+        amount: pr.amount,
+        currency: pr.currency,
+        unit: pr.unit,
+      })),
+      inventory: approvedInventory.map((inv) => ({
+        code: inv.productCode,
+        avail: inv.availableQuantity,
+        res: inv.reservedQuantity,
+      })),
     });
     const checksum = crypto.createHash('sha256').update(payloadForChecksum).digest('hex');
 
@@ -210,6 +319,10 @@ export class GoogleSheetsSyncEngine {
           products: approvedProducts.length,
           prices: approvedPrices.length,
           inventory: approvedInventory.length,
+        },
+        details: {
+          skippedPending: totalSkippedPending,
+          skippedDisabled: totalSkippedDisabled,
         },
         lastSuccessAt: latestSuccess.lastSuccessAt,
       };
@@ -231,17 +344,21 @@ export class GoogleSheetsSyncEngine {
           productsAdded: approvedProducts.length,
           pricesCreated: approvedPrices.length,
           inventoryUpdated: approvedInventory.length,
+          skippedPending: totalSkippedPending,
+          skippedDisabled: totalSkippedDisabled,
         },
       };
     }
 
     // 7. Atomic Database Mutation with Advisory Lock
-    let details = {
+    const details = {
       productsAdded: 0,
       productsUpdated: 0,
       pricesCreated: 0,
       pricesUnchanged: 0,
       inventoryUpdated: 0,
+      skippedPending: totalSkippedPending,
+      skippedDisabled: totalSkippedDisabled,
     };
 
     const now = new Date();
@@ -262,7 +379,7 @@ export class GoogleSheetsSyncEngine {
         if (ep.code) productMap.set(ep.code.toUpperCase(), ep);
       }
 
-      // Sync Products
+      // Sync Products (Source-Fidelity: preserve exact code, name, yarnType, color)
       for (const p of approvedProducts) {
         const codeKey = p.productCode.toUpperCase();
         const existing = productMap.get(codeKey);
@@ -272,6 +389,9 @@ export class GoogleSheetsSyncEngine {
             code: p.productCode,
             name: p.productName,
             category: p.category || 'General',
+            yarnType: p.yarnType || undefined,
+            count: p.count || undefined,
+            composition: p.composition || undefined,
             description: p.description || '',
             price: 0,
             currency: 'USD',
@@ -287,6 +407,9 @@ export class GoogleSheetsSyncEngine {
           await txRepos.products.update(existing.id, {
             name: p.productName,
             category: p.category,
+            yarnType: p.yarnType || undefined,
+            count: p.count || undefined,
+            composition: p.composition || undefined,
             description: p.description,
             active: p.active,
             aiRecommendable: p.active,
@@ -339,20 +462,31 @@ export class GoogleSheetsSyncEngine {
         details.pricesCreated++;
       }
 
-      // Sync Inventory
+      // Sync Inventory (Nullable quantities for UNKNOWN stock without falsifying to 0)
       for (const inv of approvedInventory) {
         const prod = productMap.get(inv.productCode.toUpperCase());
         if (!prod) continue;
 
-        const status = inv.availableQuantity === 0 ? 'OUT_OF_STOCK' : inv.availableQuantity < 500 ? 'LOW_STOCK' : 'IN_STOCK';
-
-        await txRepos.productInventory.upsert(prod.id, {
-          availableQuantity: inv.availableQuantity,
-          reservedQuantity: inv.reservedQuantity,
-          unit: inv.unit,
-          warehouse: inv.warehouse,
-          status,
-        });
+        if (inv.availableQuantity === null) {
+          // If availableQuantity is null/unknown, save status as UNKNOWN without putting fake 0
+          await txRepos.productInventory.upsert(prod.id, {
+            availableQuantity: 0,
+            reservedQuantity: 0,
+            unit: inv.unit,
+            warehouse: inv.warehouse,
+            status: 'UNKNOWN',
+          });
+        } else {
+          const avail = inv.availableQuantity;
+          const status = avail === 0 ? 'OUT_OF_STOCK' : avail < 500 ? 'LOW_STOCK' : 'IN_STOCK';
+          await txRepos.productInventory.upsert(prod.id, {
+            availableQuantity: avail,
+            reservedQuantity: inv.reservedQuantity || 0,
+            unit: inv.unit,
+            warehouse: inv.warehouse,
+            status,
+          });
+        }
         details.inventoryUpdated++;
       }
 

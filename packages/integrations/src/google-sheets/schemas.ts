@@ -15,22 +15,43 @@ export const parseBoolean = (val: unknown): boolean => {
 };
 
 // Helper: parse comma decimals or numbers
-export const parseNumeric = (val: unknown): number => {
-  if (typeof val === 'number') return val;
+export const parseNumeric = (val: unknown): number | undefined => {
+  if (val === undefined || val === null) return undefined;
+  if (typeof val === 'number') return isNaN(val) ? undefined : val;
   if (typeof val === 'string') {
-    const sanitized = val.trim().replace(',', '.');
+    const trimmed = val.trim();
+    if (trimmed === '') return undefined;
+    const sanitized = trimmed.replace(',', '.');
     const num = parseFloat(sanitized);
     if (!isNaN(num)) return num;
   }
   return NaN;
 };
 
-// 1. Products Tab Schema
+// Helper: parse nullable numeric (for unknown inventory)
+export const parseNullableNumeric = (val: unknown): number | null => {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') return isNaN(val) ? null : val;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed === '' || trimmed.toUpperCase() === 'UNKNOWN' || trimmed === '-') return null;
+    const sanitized = trimmed.replace(',', '.');
+    const num = parseFloat(sanitized);
+    return isNaN(num) ? null : num;
+  }
+  return null;
+};
+
+// 1. Products Tab Schema (Source-Fidelity: preserve raw names, tokens, empty color)
 export const SheetProductRowSchema = z.object({
   rowNumber: z.number().int(),
   productCode: z.string().min(1, 'productCode is required'),
   productName: z.string().min(1, 'productName is required'),
   category: z.string().default('General'),
+  color: z.string().optional().default(''),
+  yarnType: z.string().optional().default(''),
+  count: z.string().optional().default(''),
+  composition: z.string().optional().default(''),
   description: z.string().optional().default(''),
   unit: z.string().default('kg'),
   active: z.preprocess(parseBoolean, z.boolean().default(true)),
@@ -57,18 +78,23 @@ export const SheetPriceRowSchema = z.object({
 });
 export type SheetPriceRow = z.infer<typeof SheetPriceRowSchema>;
 
-// 3. Inventory Tab Schema
+// 3. Inventory Tab Schema (Nullable quantities for UNKNOWN stock without falsifying to 0)
 export const SheetInventoryRowSchema = z.object({
   rowNumber: z.number().int(),
   productCode: z.string().min(1, 'productCode is required'),
-  availableQuantity: z.preprocess(parseNumeric, z.number().gte(0, 'availableQuantity must be >= 0')),
-  reservedQuantity: z.preprocess(parseNumeric, z.number().gte(0, 'reservedQuantity must be >= 0').default(0)),
+  availableQuantity: z.preprocess(parseNullableNumeric, z.number().gte(0, 'availableQuantity must be >= 0').nullable()),
+  reservedQuantity: z.preprocess((v) => (v === '' || v === undefined ? 0 : parseNullableNumeric(v)), z.number().gte(0, 'reservedQuantity must be >= 0').nullable().default(0)),
   unit: z.string().default('kg'),
   warehouse: z.string().default('Toshkent Bosh Ombor'),
   approvalStatus: z.string().transform((s) => s.trim().toUpperCase()),
   syncEnabled: z.preprocess(parseBoolean, z.boolean()),
   notes: z.string().optional(),
-}).refine((data) => data.reservedQuantity <= data.availableQuantity, {
+}).refine((data) => {
+  if (data.availableQuantity !== null && data.reservedQuantity !== null) {
+    return data.reservedQuantity <= data.availableQuantity;
+  }
+  return true;
+}, {
   message: 'reservedQuantity cannot exceed availableQuantity',
   path: ['reservedQuantity'],
 });
