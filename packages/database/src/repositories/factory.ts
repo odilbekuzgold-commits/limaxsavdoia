@@ -18,6 +18,7 @@ import {
   InMemoryProductMediaRepository,
   InMemorySalesSettingsRepository,
   InMemoryAuditLogRepository,
+  InMemoryGoogleSheetsSyncRepository,
 } from './memory/index.js';
 import {
   PgCustomerRepository,
@@ -37,6 +38,7 @@ import {
   PgProductMediaRepository,
   PgSalesSettingsRepository,
   PgAuditLogRepository,
+  PgGoogleSheetsSyncRepository,
 } from './pg/index.js';
 
 export type RepositoryDriver = 'memory' | 'postgres';
@@ -64,6 +66,7 @@ export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool | pg
       telegramConnections: new PgTelegramBusinessConnectionRepository(pool),
       telegramReceipts: new PgTelegramUpdateReceiptRepository(pool),
       aiUsage: new PgAIUsageRepository(pool),
+      googleSheetsSync: new PgGoogleSheetsSyncRepository(pool),
     };
   }
 
@@ -87,6 +90,7 @@ export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool | pg
       telegramConnections: new InMemoryTelegramBusinessConnectionRepository(),
       telegramReceipts: new InMemoryTelegramUpdateReceiptRepository(),
       aiUsage: new InMemoryAIUsageRepository(),
+      googleSheetsSync: new InMemoryGoogleSheetsSyncRepository(),
     };
   }
 

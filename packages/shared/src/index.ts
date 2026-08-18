@@ -229,18 +229,26 @@ export const CreateProductSchema = ProductSchema.omit({
 });
 export type CreateProduct = z.infer<typeof CreateProductSchema>;
 
+export const PaymentTypeEnum = z.enum(['BANK_TRANSFER', 'CASH', 'LEGACY']);
+export type PaymentType = z.infer<typeof PaymentTypeEnum>;
+
 // Product Price Schema
 export const ProductPriceSchema = z.object({
   id: z.string().uuid(),
   productId: z.string().uuid(),
   price: z.number().gt(0, 'Price must be greater than 0'),
   currency: z.string().default('USD'),
+  paymentType: PaymentTypeEnum.default('LEGACY'),
   unit: z.string().default('kg'),
   minimumQuantity: z.number().gte(0).default(1),
   validFrom: z.date(),
   validUntil: z.date().optional(),
   active: z.boolean().default(true),
   notes: z.string().optional(),
+  sourceSystem: z.string().optional(),
+  externalRowId: z.string().optional(),
+  sourceUpdatedAt: z.date().optional(),
+  syncedAt: z.date().optional(),
   updatedBy: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -253,6 +261,26 @@ export const CreateProductPriceSchema = ProductPriceSchema.omit({
   updatedAt: true,
 });
 export type CreateProductPrice = z.infer<typeof CreateProductPriceSchema>;
+
+// Google Sheets Sync State Schema
+export const GoogleSheetsSyncStatusEnum = z.enum(['SUCCESS', 'FAILED', 'IN_PROGRESS']);
+export type GoogleSheetsSyncStatus = z.infer<typeof GoogleSheetsSyncStatusEnum>;
+
+export const GoogleSheetsSyncStateSchema = z.object({
+  id: z.string().uuid(),
+  spreadsheetId: z.string().min(1),
+  status: GoogleSheetsSyncStatusEnum,
+  lastAttemptAt: z.date(),
+  lastSuccessAt: z.date().nullable().optional(),
+  checksum: z.string().nullable().optional(),
+  productsCount: z.number().int().default(0),
+  pricesCount: z.number().int().default(0),
+  inventoryCount: z.number().int().default(0),
+  sanitizedError: z.string().nullable().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type GoogleSheetsSyncState = z.infer<typeof GoogleSheetsSyncStateSchema>;
 
 // Product Inventory Schema
 export const ProductInventorySchema = z.object({

@@ -129,9 +129,10 @@ export async function runMigrations(customPool?: pg.Pool): Promise<void> {
           throw new Error(`Migration ${name} failed: ${msg}`);
         }
 
-        await client.query('INSERT INTO _migrations (name) VALUES ($1)', [
-          name,
-        ]);
+        await client.query(
+          'INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING',
+          [name]
+        );
         console.log(`[Database Migration] Applied: ${name}`);
       }
     }

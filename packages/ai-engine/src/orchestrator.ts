@@ -198,6 +198,44 @@ export class AIOrchestrator {
       structuredBusinessFacts: structuredFacts,
     };
 
+    // Stale Business Data Check for Price and Stock Queries
+    const isPriceOrStockQuery =
+      lowerPrompt.includes('narxi') ||
+      lowerPrompt.includes('price') ||
+      lowerPrompt.includes('moq') ||
+      lowerPrompt.includes('ombor') ||
+      lowerPrompt.includes('stock') ||
+      lowerPrompt.includes('bormi') ||
+      lowerPrompt.includes('борми') ||
+      lowerPrompt.includes('есть') ||
+      lowerPrompt.includes('почём') ||
+      lowerPrompt.includes('сколько');
+
+    if (isPriceOrStockQuery && repos?.googleSheetsSync) {
+      const latestSync = await repos.googleSheetsSync.getLatestSuccess();
+      if (latestSync?.lastSuccessAt) {
+        const lastSyncTime = new Date(latestSync.lastSuccessAt).getTime();
+        const isStale = Date.now() - lastSyncTime > 10 * 60 * 1000;
+        if (isStale) {
+          const res = await this.formatAndRecordHandoff(
+            {
+              replyText: `Maʼlumotlar yangilanmoqda. Narx va ombor qoldigʻini aniqlashtirish uchun tez orada menejerimiz siz bilan bogʻlanadi.`,
+              language: lang,
+              intent: lowerPrompt.includes('narxi') || lowerPrompt.includes('price') ? 'product_price' : 'product_stock',
+              confidence: 0.5,
+              needsHandoff: true,
+              handoffReason: 'STALE_BUSINESS_DATA',
+              leadSignals: {},
+              usedKnowledgeIds: [],
+            },
+            context,
+            repos
+          );
+          return this.enforceActionHonesty(res, options?.actionExecuted, templates);
+        }
+      }
+    }
+
     // 3.6. Template Q&A Router Stage (Priority 0 — Zero Cost / No AI Provider Call)
     const templateRouter = new TemplateQARouter();
     const templateResult = await templateRouter.routeQuery(prompt, templateContext, {
@@ -224,17 +262,6 @@ export class AIOrchestrator {
 
     // 4.1. Fast Direct Product Resolution for Price / Stock Queries
     const matchedProducts = matchProducts(prompt, activeProducts);
-    const isPriceOrStockQuery =
-      lowerPrompt.includes('narxi') ||
-      lowerPrompt.includes('price') ||
-      lowerPrompt.includes('moq') ||
-      lowerPrompt.includes('ombor') ||
-      lowerPrompt.includes('stock') ||
-      lowerPrompt.includes('bormi') ||
-      lowerPrompt.includes('борми') ||
-      lowerPrompt.includes('есть') ||
-      lowerPrompt.includes('почём') ||
-      lowerPrompt.includes('сколько стоит');
 
     if (isPriceOrStockQuery) {
       if (matchedProducts.length > 0) {

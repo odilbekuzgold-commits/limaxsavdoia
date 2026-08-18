@@ -1,9 +1,12 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
-import { apiPost, apiPatch, apiPut } from '../../lib/api';
+export type BusinessActionResult<T = any> = {
+  success: boolean;
+  error?: string;
+  data?: T;
+};
 
-export async function createProductAction(data: {
+export async function createProductAction(_data: {
   code?: string;
   name: string;
   category?: string;
@@ -11,39 +14,34 @@ export async function createProductAction(data: {
   price?: number;
   currency?: string;
   active?: boolean;
-}) {
-  try {
-    const res = await apiPost<{ data: unknown }>('/api/v1/products', data);
-    revalidatePath('/dashboard/products');
-    revalidatePath('/dashboard/inventory');
-    return { success: true, data: res.data };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
-  }
+}): Promise<BusinessActionResult> {
+  return {
+    success: false,
+    error: 'Mahsulotlar faqat Google Sheets orqali boshqariladi (Dashboard read-only rejimida).',
+  };
 }
 
-export async function updateProductAction(id: string, data: Record<string, unknown>) {
-  try {
-    const res = await apiPatch<{ data: unknown }>(`/api/v1/products/${id}`, data);
-    revalidatePath('/dashboard/products');
-    return { success: true, data: res.data };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
-  }
+export async function updateProductAction(
+  _id: string,
+  _data: Record<string, unknown>
+): Promise<BusinessActionResult> {
+  return {
+    success: false,
+    error: 'Mahsulotlar faqat Google Sheets orqali yangilanadi (Dashboard read-only rejimida).',
+  };
 }
 
-export async function toggleProductActiveAction(id: string, active: boolean) {
-  try {
-    const endpoint = active ? `/api/v1/products/${id}/activate` : `/api/v1/products/${id}/deactivate`;
-    const res = await apiPost<{ data: unknown }>(endpoint);
-    revalidatePath('/dashboard/products');
-    return { success: true, data: res.data };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
-  }
+export async function toggleProductActiveAction(
+  _id: string,
+  _active: boolean
+): Promise<BusinessActionResult> {
+  return {
+    success: false,
+    error: 'Mahsulot holati faqat Google Sheets orqali oʻzgartiriladi (Dashboard read-only rejimida).',
+  };
 }
 
-export async function createPriceAction(data: {
+export async function createPriceAction(_data: {
   productId: string;
   amount: number;
   currency?: string;
@@ -53,46 +51,33 @@ export async function createPriceAction(data: {
   validUntil?: string;
   notes?: string;
   active?: boolean;
-}) {
-  try {
-    const res = await apiPost<{ data: unknown }>('/api/v1/pricing', data);
-    revalidatePath('/dashboard/products');
-    revalidatePath('/dashboard/settings/sales');
-    return { success: true, data: res.data };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
-  }
+}): Promise<BusinessActionResult> {
+  return {
+    success: false,
+    error: 'Narxlar faqat Google Sheets orqali boshqariladi (Dashboard read-only rejimida).',
+  };
 }
 
-export async function deactivatePriceAction(priceId: string) {
-  try {
-    const res = await apiPost<{ data: unknown }>(`/api/v1/pricing/${priceId}/deactivate`);
-    revalidatePath('/dashboard/products');
-    revalidatePath('/dashboard/settings/sales');
-    return { success: true, data: res.data };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
-  }
+export async function deactivatePriceAction(_priceId: string): Promise<BusinessActionResult> {
+  return {
+    success: false,
+    error: 'Narxlar faqat Google Sheets orqali boshqariladi (Dashboard read-only rejimida).',
+  };
 }
 
-export async function updateInventoryAction(productId: string, data: {
-  availableQuantity: number;
-  reservedQuantity: number;
-  unit?: string;
-  warehouse?: string;
-  status?: string;
-  expectedVersion?: number;
-}) {
-  try {
-    const res = await apiPut<{ data: unknown }>(`/api/v1/inventory/${productId}`, data);
-    revalidatePath('/dashboard/inventory');
-    revalidatePath('/dashboard/products');
-    return { success: true, data: res.data };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('409') || msg.includes('version conflict') || msg.includes('INVENTORY_VERSION_CONFLICT')) {
-      return { success: false, error: 'Ma’lumot boshqa sessiyada yangilangan. Sahifani yangilang.' };
-    }
-    return { success: false, error: msg };
+export async function updateInventoryAction(
+  _productId: string,
+  _data?: {
+    availableQuantity?: number;
+    reservedQuantity?: number;
+    unit?: string;
+    warehouse?: string;
+    status?: string;
+    expectedVersion?: number;
   }
+): Promise<BusinessActionResult> {
+  return {
+    success: false,
+    error: 'Ombor qoldiqlari faqat Google Sheets orqali yangilanadi (Dashboard read-only rejimida).',
+  };
 }

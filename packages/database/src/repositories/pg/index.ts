@@ -15,3 +15,4 @@ export { PgProductCertificateRepository } from './product-certificate.repository
 export { PgProductMediaRepository } from './product-media.repository.js';
 export { PgSalesSettingsRepository } from './sales-settings.repository.js';
 export { PgAuditLogRepository } from './audit-log.repository.js';
+export { PgGoogleSheetsSyncRepository } from './google-sheets-sync.repository.js';

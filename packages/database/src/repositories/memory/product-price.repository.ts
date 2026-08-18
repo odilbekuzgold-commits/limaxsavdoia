@@ -32,6 +32,7 @@ export class InMemoryProductPriceRepository implements IProductPriceRepository {
           productId: prod.id,
           price: prod.price ?? 0,
           currency: prod.currency ?? 'USD',
+          paymentType: 'LEGACY',
           unit: 'kg',
           minimumQuantity: 1,
           active: true,
@@ -44,21 +45,24 @@ export class InMemoryProductPriceRepository implements IProductPriceRepository {
     return null;
   }
 
+  async getActivePrice(productId: string, paymentType?: string): Promise<ProductPrice | null> {
+    const all = await this.findByProductId(productId);
+    const now = new Date();
+    for (const item of all) {
+      if (!item.active) continue;
+      if (item.validFrom && item.validFrom.getTime() > now.getTime()) continue;
+      if (item.validUntil && item.validUntil.getTime() < now.getTime()) continue;
+      if (paymentType && item.paymentType && item.paymentType !== paymentType) continue;
+      return item;
+    }
+    return null;
+  }
+
   async create(data: CreateProductPrice): Promise<ProductPrice> {
     const now = new Date();
-    // Validate overlapping active prices for same product, currency and unit
-    if (data.active !== false) {
-      const activePrices = (await this.findByProductId(data.productId)).filter((p) => p.active);
-      const isOverlap = activePrices.some(
-        (p) => p.currency === data.currency && p.unit === data.unit && (!p.validUntil || p.validUntil.getTime() > now.getTime())
-      );
-      if (isOverlap) {
-        throw new Error(`Overlapping active price already exists for currency '${data.currency}' and unit '${data.unit}'`);
-      }
-    }
-
     const item: ProductPrice = {
       ...data,
+      paymentType: data.paymentType || 'LEGACY',
       id: randomUUID(),
       createdAt: now,
       updatedAt: now,

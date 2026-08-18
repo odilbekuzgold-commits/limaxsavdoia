@@ -30,7 +30,11 @@ export class TelegramClient {
   private async request<T>(method: string, body?: Record<string, unknown>): Promise<T> {
     const url = `${this.baseUrl}/bot${this.token}/${method}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const longPollTimeoutSec = typeof body?.timeout === 'number' ? (body.timeout as number) : 0;
+    const effectiveTimeoutMs = longPollTimeoutSec > 0
+      ? (longPollTimeoutSec + 15) * 1000
+      : Math.max(this.timeoutMs, 30000);
+    const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
     try {
       const response = await fetch(url, {

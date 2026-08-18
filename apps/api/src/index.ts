@@ -120,6 +120,7 @@ import {
   createTelegramStatusRouter,
   TelegramPollingRunner,
 } from './modules/telegram/index.js';
+import { createGoogleSheetsRouter } from './modules/google-sheets/router.js';
 
 import { loadBehaviorV2Config, createEmbeddingProvider } from '@limax/ai-engine';
 
@@ -197,6 +198,15 @@ app.use(
     env.TELEGRAM_WEBHOOK_URL,
     driver
   )
+);
+app.use(
+  '/api/v1/integrations/google-sheets',
+  createGoogleSheetsRouter({
+    repos,
+    driver,
+    pool,
+    internalToken: env.INTERNAL_API_TOKEN,
+  })
 );
 
 // Start Telegram Polling Runner if in polling mode and token is configured

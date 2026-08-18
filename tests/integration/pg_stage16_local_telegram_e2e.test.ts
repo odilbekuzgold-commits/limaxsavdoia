@@ -95,12 +95,12 @@ describe('Stage 16: Local Real Telegram End-to-End & PostgreSQL Persistence Test
     }
   });
 
-  it('1. Preflight: PostgreSQL migration ledger contains all 13 migrations', async () => {
+  it('1. Preflight: PostgreSQL migration ledger contains all 14 migrations', async () => {
     const ledger = await pool.query('SELECT name FROM _migrations ORDER BY name ASC');
-    assert.ok(ledger.rows.length >= 13, `Expected at least 13 applied migrations, found ${ledger.rows.length}`);
+    assert.ok(ledger.rows.length >= 14, `Expected at least 14 applied migrations, found ${ledger.rows.length}`);
     const names = ledger.rows.map((r) => r.name);
     assert.ok(names.includes('001_pgvector_extension'));
-    assert.ok(names.includes('013_knowledge_runtime_rag_alignment'));
+    assert.ok(names.includes('014_google_sheets_business_sync'));
   });
 
   it('2. Seed TEST_ONLY Products, Active Prices and Inventory in PostgreSQL', async () => {

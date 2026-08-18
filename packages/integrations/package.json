@@ -1,5 +1,23 @@
 {
   "name": "@limax/integrations",
   "private": true,
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@limax/database": "workspace:*",
+    "@limax/logger": "workspace:*",
+    "@limax/shared": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.6",
+    "typescript": "^5.5.2"
+  }
 }

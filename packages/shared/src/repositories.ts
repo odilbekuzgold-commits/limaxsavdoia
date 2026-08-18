@@ -29,7 +29,18 @@ import type {
   TelegramBusinessConnection,
   TelegramUpdateReceipt,
   AIUsageLog,
+  GoogleSheetsSyncState,
 } from './index.js';
+
+export interface KnowledgeIndexState {
+  knowledgeItemId: string;
+  chunkCount: number;
+  contentHashes: string[];
+  providers: string[];
+  models: string[];
+  dimensions: number[];
+  latestIndexedAt?: Date;
+}
 
 // ==========================================
 // Common Types
@@ -101,6 +112,7 @@ export interface IProductRepository {
 export interface IProductPriceRepository {
   findByProductId(productId: string): Promise<ProductPrice[]>;
   findActiveByProductId(productId: string, date?: Date): Promise<ProductPrice | null>;
+  getActivePrice(productId: string, paymentType?: string): Promise<ProductPrice | null>;
   create(data: CreateProductPrice): Promise<ProductPrice>;
   update(id: string, data: Partial<ProductPrice>): Promise<ProductPrice | null>;
 }
@@ -130,16 +142,6 @@ export interface ISalesSettingsRepository {
 export interface IAuditLogRepository {
   create(data: CreateAuditLog): Promise<AuditLog>;
   findAll(params: { page: number; limit: number; entity?: string }): Promise<PaginatedResult<AuditLog>>;
-}
-
-export interface KnowledgeIndexState {
-  knowledgeItemId: string;
-  chunkCount: number;
-  contentHashes: string[];
-  providers: string[];
-  models: string[];
-  dimensions: number[];
-  latestIndexedAt?: Date;
 }
 
 export interface IKnowledgeRepository {
@@ -191,6 +193,12 @@ export interface IAIUsageRepository {
   findByConversationId(conversationId: string): Promise<AIUsageLog[]>;
 }
 
+export interface IGoogleSheetsSyncRepository {
+  create(data: Omit<GoogleSheetsSyncState, 'id' | 'createdAt' | 'updatedAt'>): Promise<GoogleSheetsSyncState>;
+  getLatest(spreadsheetId?: string): Promise<GoogleSheetsSyncState | null>;
+  getLatestSuccess(spreadsheetId?: string): Promise<GoogleSheetsSyncState | null>;
+}
+
 // ==========================================
 // Repositories Container
 // ==========================================
@@ -213,4 +221,5 @@ export interface Repositories {
   telegramConnections: ITelegramBusinessConnectionRepository;
   telegramReceipts: ITelegramUpdateReceiptRepository;
   aiUsage: IAIUsageRepository;
+  googleSheetsSync: IGoogleSheetsSyncRepository;
 }

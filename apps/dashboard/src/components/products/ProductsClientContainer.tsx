@@ -247,6 +247,24 @@ export function ProductsClientContainer({ initialProducts, initialPrices }: Prop
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Google Sheets Sync Info Banner */}
+      <div style={{ padding: '14px 18px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <span style={{ fontWeight: 600, color: '#166534' }}>📊 Manba: Google Sheets (Read-Only)</span>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#15803d' }}>
+            Mahsulotlar va narxlar faqat tasdiqlangan Google Sheet orqali sinxronlanadi. Boshqaruv panelidan toʻgʻridan-toʻgʻri oʻzgartirish bloklangan.
+          </p>
+        </div>
+        <a
+          href="https://docs.google.com/spreadsheets/d/1a8ouEPIArKhHzrLlmGGlpiD1wKYqOFKHzMoY9JkllBI/edit"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ padding: '6px 12px', background: '#16a34a', color: '#fff', textDecoration: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 500 }}
+        >
+          Google Sheetni Ochish ↗
+        </a>
+      </div>
+
       {/* Messages */}
       {errorMsg && (
         <div style={{ padding: '12px 16px', background: '#fee2e2', color: '#991b1b', borderRadius: '8px', border: '1px solid #fca5a5' }}>
