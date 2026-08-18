@@ -14,7 +14,8 @@
     "test:integration:rag-truth": "node --test tests/integration/pg_stage15_rag_business_truth.test.ts",
     "test:integration:knowledge-approval": "node --test tests/integration/pg_stage15_2_knowledge_approval_http.test.ts",
     "test:integration:knowledge-integrity": "node --test tests/integration/pg_stage15_3_knowledge_integrity.test.ts",
-    "test:integration:postgres": "node --test tests/integration/pg_handoff_delivery_persistence.test.ts tests/integration/pg_stage14_business_crud.test.ts tests/integration/pg_stage15_rag_business_truth.test.ts tests/integration/pg_stage15_1_runtime_pgvector_rag.test.ts tests/integration/pg_stage15_2_knowledge_approval_http.test.ts tests/integration/pg_stage15_3_knowledge_integrity.test.ts",
+    "test:integration:telegram-e2e": "node --test tests/integration/pg_stage16_local_telegram_e2e.test.ts",
+    "test:integration:postgres": "node --test tests/integration/pg_handoff_delivery_persistence.test.ts tests/integration/pg_stage14_business_crud.test.ts tests/integration/pg_stage15_rag_business_truth.test.ts tests/integration/pg_stage15_1_runtime_pgvector_rag.test.ts tests/integration/pg_stage15_2_knowledge_approval_http.test.ts tests/integration/pg_stage15_3_knowledge_integrity.test.ts tests/integration/pg_stage16_local_telegram_e2e.test.ts",
     "test:e2e:dashboard": "playwright test tests/e2e/dashboard-business-crud.spec.ts"
   },
   "devDependencies": {
