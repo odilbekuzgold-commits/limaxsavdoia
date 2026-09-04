@@ -1,10 +1,31 @@
 'use server';
 
+import { apiGet } from '../../lib/api';
+
 export type BusinessActionResult<T = any> = {
   success: boolean;
   error?: string;
   data?: T;
 };
+
+export async function getConversationsAction(): Promise<BusinessActionResult<any[]>> {
+  try {
+    const res = await apiGet<{ data: any[] }>('/api/v1/conversations');
+    return { success: true, data: res.data || [] };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Suhbatlar yuklanmadi' };
+  }
+}
+
+export async function getConversationThreadAction(id: string): Promise<BusinessActionResult<any>> {
+  try {
+    const res = await apiGet<{ data: any }>(`/api/v1/conversations/${id}`);
+    return { success: true, data: res.data };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Suhbat xabarlari yuklanmadi' };
+  }
+}
+
 
 export async function createProductAction(_data: {
   code?: string;

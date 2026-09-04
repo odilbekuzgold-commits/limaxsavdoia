@@ -1,11 +1,19 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import type { IConversationRepository, IMessageRepository, IHandoffRepository } from '@limax/shared';
+import type {
+  IConversationRepository,
+  IMessageRepository,
+  IHandoffRepository,
+  ICustomerRepository,
+  IContactRepository,
+} from '@limax/shared';
 import { MockAIProvider } from '@limax/ai-engine';
 
 export function createConversationsRouter(
   conversationRepo: IConversationRepository,
   messageRepo: IMessageRepository,
   handoffRepo: IHandoffRepository,
+  customerRepo?: ICustomerRepository,
+  contactRepo?: IContactRepository,
 ): Router {
   const router: Router = Router();
   const aiProvider = new MockAIProvider();
@@ -15,7 +23,55 @@ export function createConversationsRouter(
     try {
       const status = req.query.status as string | undefined;
       const all = await conversationRepo.findAll({ status });
-      res.json({ data: all, meta: { total: all.length } });
+      const enriched = await Promise.all(
+        all.map(async (conv) => {
+          let customerName = 'Telegram Foydalanuvchisi';
+          let customerPhone: string | undefined;
+          let customerUsername: string | undefined;
+          if (customerRepo && conv.customerId) {
+            try {
+              const cust = await customerRepo.findById(conv.customerId);
+              if (cust?.name) customerName = cust.name;
+            } catch {
+              // Non-critical customer lookup failure
+            }
+          }
+          if (contactRepo && conv.contactId) {
+            try {
+              const cont = await contactRepo.findById(conv.contactId);
+              if (cont?.username) customerUsername = cont.username;
+              if (cont?.phone) customerPhone = cont.phone;
+            } catch {
+              // Non-critical contact lookup failure
+            }
+          }
+          let messagesCount = 0;
+          let lastMessage: { content: string; senderType: string; createdAt: Date } | undefined;
+          try {
+            const msgs = await messageRepo.findByConversationId(conv.id);
+            messagesCount = msgs.length;
+            if (msgs.length > 0) {
+              const lastMsg = msgs[msgs.length - 1];
+              lastMessage = {
+                content: lastMsg.content,
+                senderType: lastMsg.senderType,
+                createdAt: lastMsg.createdAt,
+              };
+            }
+          } catch {
+            // Non-critical message lookup failure
+          }
+          return {
+            ...conv,
+            customerName,
+            customerPhone,
+            customerUsername,
+            messagesCount,
+            lastMessage,
+          };
+        })
+      );
+      res.json({ data: enriched, meta: { total: all.length } });
     } catch (err) {
       next(err);
     }
@@ -29,8 +85,37 @@ export function createConversationsRouter(
         res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Conversation not found' } });
         return;
       }
+      let customerName = 'Telegram Foydalanuvchisi';
+      let customerPhone: string | undefined;
+      let customerUsername: string | undefined;
+      if (customerRepo && conv.customerId) {
+        try {
+          const cust = await customerRepo.findById(conv.customerId);
+          if (cust?.name) customerName = cust.name;
+        } catch {
+          // Non-critical customer lookup failure
+        }
+      }
+      if (contactRepo && conv.contactId) {
+        try {
+          const cont = await contactRepo.findById(conv.contactId);
+          if (cont?.username) customerUsername = cont.username;
+          if (cont?.phone) customerPhone = cont.phone;
+        } catch {
+          // Non-critical contact lookup failure
+        }
+      }
       const msgs = await messageRepo.findByConversationId(req.params.id);
-      res.json({ data: { ...conv, messages: msgs } });
+      msgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      res.json({
+        data: {
+          ...conv,
+          customerName,
+          customerPhone,
+          customerUsername,
+          messages: msgs,
+        },
+      });
     } catch (err) {
       next(err);
     }

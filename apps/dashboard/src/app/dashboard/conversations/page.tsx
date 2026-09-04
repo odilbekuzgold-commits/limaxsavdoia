@@ -1,9 +1,30 @@
-import { apiGet } from '../../../lib/api';
-import { Empty, PageShell } from '../../../components/PageShell';
+export const dynamic = 'force-dynamic';
 
-type Conversation = { id: string; customerId: string; channel?: string; status: string; lastMessageAt?: string };
+import { apiGet } from '../../../lib/api';
+import { PageShell } from '../../../components/PageShell';
+import {
+  ConversationsClientContainer,
+  type ConversationItem,
+} from '../../../components/conversations/ConversationsClientContainer';
+
 export default async function ConversationsPage() {
-  let items: Conversation[] = []; let error = '';
-  try { items = (await apiGet<{ data: Conversation[] }>('/api/v1/conversations')).data; } catch (e) { error = e instanceof Error ? e.message : 'Yuklanmadi'; }
-  return <PageShell title="Suhbatlar" description="Telegram va boshqa kanallardagi mijoz suhbatlari.">{error && <div className="data-error">{error}</div>}{items.length ? <div className="table-wrap"><table><thead><tr><th>Mijoz</th><th>Kanal</th><th>Status</th><th>Oxirgi xabar</th></tr></thead><tbody>{items.map(x=><tr key={x.id}><td>{x.customerId}</td><td>{x.channel ?? 'telegram'}</td><td><span className="table-tag">{x.status}</span></td><td>{x.lastMessageAt ? new Date(x.lastMessageAt).toLocaleString('uz-UZ') : '—'}</td></tr>)}</tbody></table></div>:!error&&<Empty>Bot xabar qabul qilganda suhbatlar shu yerda paydo bo‘ladi.</Empty>}</PageShell>;
+  let items: ConversationItem[] = [];
+  let error = '';
+
+  try {
+    const res = await apiGet<{ data: ConversationItem[] }>('/api/v1/conversations');
+    items = res.data || [];
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Suhbatlar ro‘yxati yuklanmadi';
+  }
+
+  return (
+    <PageShell
+      title="Suhbatlar & Muloqotlar"
+      description="Telegram kanallari orqali mijozlar bilan bo‘lgan barcha suhbatlar va xabarlar tarixi."
+    >
+      {error && <div className="data-error">{error}</div>}
+      <ConversationsClientContainer initialConversations={items} />
+    </PageShell>
+  );
 }
