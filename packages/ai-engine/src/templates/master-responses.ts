@@ -68,6 +68,7 @@ export const MASTER_RESPONSES_UZ = {
   // 6. Namunalar va Kataloglar
   sample: 'Ha, bizda namunalar bepul. Manzilizni aytsez taxidan chiqarib yuboramiz!',
   sampleFree: 'Ha, bizda namunalar bepul. Manzilizni aytsez taxidan chiqarib yuboramiz!',
+  sampleFollowUp: 'Namunalarimiz bepul taqdim etiladi. Sizga qaysi manzilga chiqarib yuboraylik?',
   catalogSend: 'Ha hozir yuboraman!',
   catalogHandoff: 'Ha hozir yuboraman!',
 
@@ -76,10 +77,18 @@ export const MASTER_RESPONSES_UZ = {
     'Fabrikamiz manzili: Toshkent viloyati, Angren shahri, Yangiobod ko‘chasi, 2-uy.\nIsh vaqti: Dushanba – Shanba, 08:00 dan 17:30 gacha.',
   locationAngren:
     'Fabrikamiz manzili: Toshkent viloyati, Angren shahri, Yangiobod ko‘chasi, 2-uy.\nIsh vaqti: Dushanba – Shanba, 08:00 dan 17:30 gacha.',
+  locationFollowUp:
+    'Fabrikamiz Angren shahrida joylashgan. Tashrif buyurmoqchimisiz yoki lokatsiya tashlab beraylikmi?',
   delivery:
     'Mahsulotlar Angren fabrikamizdan o‘zi olib ketish shartida topshiriladi. Shuningdek, Toshkent yoki vodiydagi yuk mashinalari (taksi/fura) orqali jo‘natishda yordam berishimiz mumkin.',
   deliveryTerms:
     'Mahsulotlar Angren fabrikamizdan o‘zi olib ketish shartida topshiriladi. Shuningdek, Toshkent yoki vodiydagi yuk mashinalari (taksi/fura) orqali jo‘natishda yordam berishimiz mumkin.',
+  deliveryToday:
+    'Omborda tayyor bo‘lsa, bugun taksi yoki yuk mashinasida chiqarib yuborishimiz mumkin. Aniq vaqtini va transportni kelishish uchun hozir menejerimiz sizga yozadi.',
+  deliveryFollowUp:
+    'Yuqorida ta’kidlaganimizdek, mahsulotlar Angren fabrikamizdan olib ketiladi yoki taksi/fura orqali jo‘natamiz. Sizga qaysi manzilga yetkazib berish kerak?',
+  paymentFollowUp:
+    'Yuqorida ta’kidlanganidek, to‘lov 100% oldindan to‘lov asosida qabul qilinadi. Sizga qaysi to‘lov usuli (o‘tkazma yoki naqd) ma’qulroq?',
   workingHours:
     'Bizning ish vaqtimiz: Dushanba – Shanba kunlari soat 08:00 dan 17:30 gacha. Yakshanba — dam olish kuni.',
 

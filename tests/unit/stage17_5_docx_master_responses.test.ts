@@ -46,17 +46,49 @@ describe('Stage 17.5: DOCX master responses runtime', () => {
     assert.strictEqual((await router.routeQuery('Mahsulot tarkibi qanday?', context))?.replyText, MASTER_RESPONSES_UZ.composition);
   });
 
-  it('retains product context when customer answers only "naqd"', async () => {
-    const result = await router.routeQuery('naqd', {
+  it('routes urgent same-day delivery inquiries to deliveryToday with manager handoff', async () => {
+    const todayDelivery = await router.routeQuery('bugun yetkazib berolasizlarmi', context);
+    assert.strictEqual(todayDelivery?.replyText, MASTER_RESPONSES_UZ.deliveryToday);
+    assert.strictEqual(todayDelivery?.needsHandoff, true);
+    assert.strictEqual(todayDelivery?.handoffReason, 'DELIVERY_TIMING_REQUEST');
+
+    const todayPossible = await router.routeQuery('bugun iloji bormi', context);
+    assert.strictEqual(todayPossible?.replyText, MASTER_RESPONSES_UZ.deliveryToday);
+    assert.strictEqual(todayPossible?.needsHandoff, true);
+    assert.strictEqual(todayPossible?.handoffReason, 'DELIVERY_TIMING_REQUEST');
+
+    const canWeToday = await router.routeQuery('bugunga ulguradimi', context);
+    assert.strictEqual(canWeToday?.replyText, MASTER_RESPONSES_UZ.deliveryToday);
+    assert.strictEqual(canWeToday?.needsHandoff, true);
+  });
+
+  it('prevents repetitive canned replies when delivery, payment, or location was already explained', async () => {
+    const deliveryAgain = await router.routeQuery('yetkazib berish bormi', {
       ...context,
-      conversationHistory: [{ role: 'user', content: '40100K narxi qancha?' }],
-      availableProducts: [{
-        id: 'p1', name: '40100K BLACK', code: '40100K-BLACK', count: '40100K',
-        category: 'Poliester', active: true, price: 2.5, currency: 'USD',
-        createdAt: new Date(), updatedAt: new Date(),
-      } as any],
+      conversationHistory: [
+        { role: 'user', content: 'yetkazib berish bormi' },
+        { role: 'assistant', content: MASTER_RESPONSES_UZ.deliveryTerms },
+      ],
     });
-    assert.ok(result?.replyText.includes('40100K'));
-    assert.ok(result?.replyText.includes('naqd'));
+    assert.strictEqual(deliveryAgain?.replyText, MASTER_RESPONSES_UZ.deliveryFollowUp);
+
+    const paymentAgain = await router.routeQuery('to‘lov shartlari qanday?', {
+      ...context,
+      conversationHistory: [
+        { role: 'user', content: 'to‘lov qanday bo‘ladi' },
+        { role: 'assistant', content: MASTER_RESPONSES_UZ.paymentTerms },
+      ],
+    });
+    assert.strictEqual(paymentAgain?.replyText, MASTER_RESPONSES_UZ.paymentFollowUp);
+
+    const locationAgain = await router.routeQuery('manzil qayerda?', {
+      ...context,
+      conversationHistory: [
+        { role: 'user', content: 'qayerda joylashgan' },
+        { role: 'assistant', content: MASTER_RESPONSES_UZ.locationAngren },
+      ],
+    });
+    assert.strictEqual(locationAgain?.replyText, MASTER_RESPONSES_UZ.locationFollowUp);
   });
 });
+

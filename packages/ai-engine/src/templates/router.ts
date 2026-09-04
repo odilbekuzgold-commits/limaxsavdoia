@@ -138,6 +138,13 @@ export class TemplateQARouter {
         return staticResult(MASTER_RESPONSES_UZ.managerHandoff, 'manager_request', true, 'CUSTOMER_REQUESTED_MANAGER');
       }
       if (/(namuna|obrazets|sample|namunalar)/i.test(lowerNormalized)) {
+        const history = context?.conversationHistory || [];
+        const hasRecentSampleReply = history.some(
+          (m) => m.role === 'assistant' && m.content.includes('namunalar bepul')
+        );
+        if (hasRecentSampleReply) {
+          return staticResult(MASTER_RESPONSES_UZ.sampleFollowUp, 'sample_followup');
+        }
         return staticResult(MASTER_RESPONSES_UZ.sampleFree, 'sample_inquiry');
       }
       if (/(chegirma|arzon|skidka|chegirmalar)/i.test(lowerNormalized)) {
@@ -147,15 +154,47 @@ export class TemplateQARouter {
         return staticResult(MASTER_RESPONSES_UZ.warranty, 'warranty_inquiry');
       }
       if (/(to['‘’]?lov shart|qanday to['‘’]?lay|oplata|оплата)/i.test(lowerNormalized)) {
+        const history = context?.conversationHistory || [];
+        const hasRecentPaymentReply = history.some(
+          (m) => m.role === 'assistant' && m.content.includes('100% oldindan to‘lov')
+        );
+        if (hasRecentPaymentReply) {
+          return staticResult(MASTER_RESPONSES_UZ.paymentFollowUp, 'payment_terms_followup');
+        }
         return staticResult(MASTER_RESPONSES_UZ.paymentTerms, 'payment_terms');
       }
       if (/(ish vaqt|soat nech|nechigacha ishl|qachon ochiq)/i.test(lowerNormalized)) {
         return staticResult(MASTER_RESPONSES_UZ.workingHours, 'working_hours');
       }
       if (/(manzil|adres|lokatsiya|qayerda joylash)/i.test(lowerNormalized)) {
+        const history = context?.conversationHistory || [];
+        const hasRecentLocationReply = history.some(
+          (m) => m.role === 'assistant' && (m.content.includes('Yangiobod ko‘chasi') || m.content.includes('Angren shahri'))
+        );
+        if (hasRecentLocationReply) {
+          return staticResult(MASTER_RESPONSES_UZ.locationFollowUp, 'location_followup');
+        }
         return staticResult(MASTER_RESPONSES_UZ.locationAngren, 'location');
       }
+      // Urgent Same-Day Dispatch & Delivery Timing
+      if (
+        /(bugun|hozir|shu bugun|tezda|tezroq).*(yetkaz|dostavka|berol|berasiz|bera ola|chiqar|jo['‘’]?nat|iloji|bo['‘’]?ladimi|ulguradimi)/i.test(lowerNormalized) ||
+        /(yetkaz|dostavka|chiqar|jo['‘’]?nat).*(bugun|hozir|qachon|necha kunda)/i.test(lowerNormalized) ||
+        /^(bugun|hozir).*(iloji|bo['‘’]?ladimi|ulguradimi)[?!. ]*$/i.test(lowerNormalized)
+      ) {
+        return staticResult(MASTER_RESPONSES_UZ.deliveryToday, 'delivery_timing', true, 'DELIVERY_TIMING_REQUEST');
+      }
+      // Generic Delivery Terms & Transport Policy (with anti-repetition memory)
       if (/(yetkaz|dostavka|jo['‘’]?natish)/i.test(lowerNormalized)) {
+        const history = context?.conversationHistory || [];
+        const hasRecentDeliveryReply = history.some(
+          (m) =>
+            m.role === 'assistant' &&
+            (m.content.includes('Angren fabrikamizdan') || m.content.includes('taksi/fura'))
+        );
+        if (hasRecentDeliveryReply) {
+          return staticResult(MASTER_RESPONSES_UZ.deliveryFollowUp, 'delivery_followup');
+        }
         return staticResult(MASTER_RESPONSES_UZ.deliveryTerms, 'delivery');
       }
       if (/(sertifikat|iso|oeko)/i.test(lowerNormalized)) {

@@ -42,6 +42,8 @@ function getManagerReasonLabel(handoffReason?: string, intent?: string): string 
       return 'Ma’lumotni aniqlashtirish kerak';
     case 'CUSTOMER_REQUESTED_MANAGER':
       return 'Mijoz menejer bilan gaplashmoqchi';
+    case 'DELIVERY_TIMING_REQUEST':
+      return 'Mijoz tezkor (bugun) yetkazib berishni so‘ramoqda';
     default:
       return 'Murojaat menejer ko‘rigini talab qildi';
   }
@@ -222,7 +224,8 @@ async function deliverHandoffNotifications(options: {
     (m) =>
       m.senderType === 'ai' &&
       m.status === 'SENT' &&
-      (m.metadata as Record<string, unknown> | undefined)?.messageKind === 'handoff_ack'
+      (m.metadata as Record<string, unknown> | undefined)?.messageKind === 'handoff_ack' &&
+      (m.metadata as Record<string, unknown> | undefined)?.handoffId === activeHandoff.id
   );
 
   let ackSent = Boolean(sentAckMsg);
