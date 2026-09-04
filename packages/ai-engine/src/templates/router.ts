@@ -197,6 +197,29 @@ export class TemplateQARouter {
         }
         return staticResult(MASTER_RESPONSES_UZ.deliveryTerms, 'delivery');
       }
+      // Invoice, Didox, B2B Faktura
+      if (/(faktura|фактура|hisob[- ]faktura|счет[- ]фактура|didox|дидокс|rekvizit|реквизит|inn|инн)/i.test(lowerNormalized)) {
+        return staticResult(MASTER_RESPONSES_UZ.invoiceTerms, 'invoice_inquiry', true, 'INVOICE_REQUEST');
+      }
+      // Packaging & Ready Boxes in Stock
+      if (
+        /(karobka|каробка|quti|кути|bobina|бобина|upakovka|упаковка)/i.test(lowerNormalized) &&
+        /(bor|бор|tayyor|тайёр|mavjud|мавжуд|bormi|борми)/i.test(lowerNormalized)
+      ) {
+        return staticResult(MASTER_RESPONSES_UZ.readyBoxesInStock, 'packaging_stock');
+      }
+      // Destination follow-up
+      const destMatch = lowerNormalized.match(/\b(norin|норин|toshkent|тошкент|samarqand|самарканд|buxoro|бухоро|andijon|андижон|namangan|наманган|farg['‘’]?ona|фаргона|фарғона|qo['‘’]?qon|кукон|қўқон|marg['‘’]?ilon|маргилон|навоий|navoiy|qashqadaryo|кашкадарё|қашқадарё|surxondaryo|сурхандарё|сурхондарё|jizzax|жиззах|sirdaryo|сирдарё|xorazm|хоразм|nukus|нукус|urganch|урганч|termiz|термиз|qarshi|карши|қарши)(ga|га|da|да)?\b/i);
+      if (destMatch) {
+        const history = context?.conversationHistory || [];
+        const hasRecentDeliveryDiscussion = history.some(
+          (m) => m.role === 'assistant' && (m.content.includes('Angren') || m.content.includes('taksi') || m.content.includes('manzil'))
+        );
+        if (hasRecentDeliveryDiscussion || destMatch[2]) {
+          const destName = destMatch[1].charAt(0).toUpperCase() + destMatch[1].slice(1);
+          return staticResult(MASTER_RESPONSES_UZ.deliveryDestinationAck(destName), 'delivery_destination', true, 'DELIVERY_DESTINATION_SPECIFIED');
+        }
+      }
       if (/(sertifikat|iso|oeko)/i.test(lowerNormalized)) {
         return staticResult(MASTER_RESPONSES_UZ.certificates, 'certificates');
       }

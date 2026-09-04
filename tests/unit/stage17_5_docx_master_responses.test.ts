@@ -90,5 +90,32 @@ describe('Stage 17.5: DOCX master responses runtime', () => {
     });
     assert.strictEqual(locationAgain?.replyText, MASTER_RESPONSES_UZ.locationFollowUp);
   });
+
+  it('handles invoice, ready packaging, and destination requests across Cyrillic and Latin', async () => {
+    const cyrillicInvoice = await router.routeQuery('Лимах фактура беришсин Пул ташаб турамиз', {
+      preferredLanguage: 'uz-Cyrl',
+    });
+    assert.strictEqual(cyrillicInvoice?.replyText, MASTER_RESPONSES_UZ.invoiceTerms);
+    assert.strictEqual(cyrillicInvoice?.needsHandoff, true);
+    assert.strictEqual(cyrillicInvoice?.handoffReason, 'INVOICE_REQUEST');
+
+    const cyrillicPackaging = await router.routeQuery('Каробка борми бугунга тайёри', {
+      preferredLanguage: 'uz-Cyrl',
+    });
+    assert.strictEqual(cyrillicPackaging?.replyText, MASTER_RESPONSES_UZ.readyBoxesInStock);
+
+    const latinPackaging = await router.routeQuery('karobka bormi bugunga tayyori', context);
+    assert.strictEqual(latinPackaging?.replyText, MASTER_RESPONSES_UZ.readyBoxesInStock);
+
+    const norinDestination = await router.routeQuery('noringa', {
+      ...context,
+      conversationHistory: [
+        { role: 'assistant', content: MASTER_RESPONSES_UZ.deliveryFollowUp },
+      ],
+    });
+    assert.strictEqual(norinDestination?.replyText, MASTER_RESPONSES_UZ.deliveryDestinationAck('Norin'));
+    assert.strictEqual(norinDestination?.needsHandoff, true);
+  });
 });
+
 

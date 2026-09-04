@@ -44,6 +44,10 @@ function getManagerReasonLabel(handoffReason?: string, intent?: string): string 
       return 'Mijoz menejer bilan gaplashmoqchi';
     case 'DELIVERY_TIMING_REQUEST':
       return 'Mijoz tezkor (bugun) yetkazib berishni so‘ramoqda';
+    case 'INVOICE_REQUEST':
+      return 'Mijoz hisob-faktura (Didox) so‘ramoqda';
+    case 'DELIVERY_DESTINATION_SPECIFIED':
+      return 'Mijoz yetkazib berish manzilini aytdi';
     default:
       return 'Murojaat menejer ko‘rigini talab qildi';
   }
@@ -228,9 +232,11 @@ async function deliverHandoffNotifications(options: {
       (m.metadata as Record<string, unknown> | undefined)?.handoffId === activeHandoff.id
   );
 
-  let ackSent = Boolean(sentAckMsg);
+  // Suppress only if an acknowledgment with the identical content was already sent for this handoff
+  const isDuplicateAck = Boolean(sentAckMsg && sentAckMsg.content === ackText);
+  let ackSent = false;
 
-  if (!sentAckMsg) {
+  if (!isDuplicateAck) {
     if (client) {
       try {
         const sentTelegramMsg = await sendTelegramTextMessage(client, {

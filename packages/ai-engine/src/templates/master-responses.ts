@@ -21,7 +21,7 @@ export const MASTER_RESPONSES_UZ = {
   // Qoida: Hech qachon bot yoki AI ekanligingni aytma
   identity: 'Nega bunday deyapsiz?',
   // Qoida: username berma, qachon aloqaga chiqishini so'rasa tez orada deb javob ber
-  managerHandoff: 'Hop bo’ladi. Managerga aytaman sizga yozadi.',
+  managerHandoff: 'Hop bo’ladi. menejerga aytaman sizga yozadi.',
   managerContactTime: 'Tez orada aloqaga chiqadi.',
   managerTiming: 'Tez orada aloqaga chiqadi.',
   securityBlocked: 'Uzur, bu masala bo‘yicha ma’lumot berolmayman.',
@@ -87,8 +87,14 @@ export const MASTER_RESPONSES_UZ = {
     'Omborda tayyor bo‘lsa, bugun taksi yoki yuk mashinasida chiqarib yuborishimiz mumkin. Aniq vaqtini va transportni kelishish uchun hozir menejerimiz sizga yozadi.',
   deliveryFollowUp:
     'Yuqorida ta’kidlaganimizdek, mahsulotlar Angren fabrikamizdan olib ketiladi yoki taksi/fura orqali jo‘natamiz. Sizga qaysi manzilga yetkazib berish kerak?',
+  deliveryDestinationAck: (destination: string) =>
+    `${destination}ga taksi yoki yuk mashinasi (fura) orqali chiqarib beramiz. Transport va yetkazish vaqtini kelishish uchun hozir menejerimiz sizga yozadi.`,
   paymentFollowUp:
     'Yuqorida ta’kidlanganidek, to‘lov 100% oldindan to‘lov asosida qabul qilinadi. Sizga qaysi to‘lov usuli (o‘tkazma yoki naqd) ma’qulroq?',
+  invoiceTerms:
+    'Ha, barcha savdolarimiz Didox orqali elektron hisob-faktura (E-faktura) bilan rasmiylashtiriladi. Tashkilotingiz rekvizitlarini (INN, hisob raqam) yuborsangiz, hisob-faktura chiqarib beramiz.',
+  readyBoxesInStock:
+    'Ha, omborimizda standart mahsulotlarimiz doim tayyor karobkalarda mavjud! Bitta karobka o‘rtacha 25–30 kg bo‘ladi. Sizga qaysi ipdan necha karobka kerak?',
   workingHours:
     'Bizning ish vaqtimiz: Dushanba – Shanba kunlari soat 08:00 dan 17:30 gacha. Yakshanba — dam olish kuni.',
 

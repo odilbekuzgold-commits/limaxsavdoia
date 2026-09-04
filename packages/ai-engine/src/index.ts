@@ -73,7 +73,10 @@ export function detectLanguage(text: string): SupportedLanguage {
       return 'tg';
     }
     // Uzbek Cyrillic specific characters (ў, қ, ғ, ҳ) or Uzbek words in Cyrillic
-    if (/[ўқғҳ]/i.test(lower) || /(салом|раҳмат|рахмат|қанша|қанча|нархи|полиэстер|иплар|кимсан|сен|сиз|борми|мисан)/i.test(lower)) {
+    if (
+      /[ўқғҳ]/i.test(lower) ||
+      /(салом|раҳмат|рахмат|қанша|қанча|канча|нархи|нарх|полиэстер|иплар|кимсан|сен|сиз|борми|мисан|бериш|беринг|беришсин|пул|ташаб|ташла|турамиз|керак|тайёр|тайёри|етказиб|доставка|каробка|бўлади|болади|йўқ|йук|нима|фабрика|фактура|лимах)/i.test(lower)
+    ) {
       return 'uz-Cyrl';
     }
     // Russian default for Cyrillic

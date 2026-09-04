@@ -32,7 +32,7 @@ export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates>
     unknownPrice: (productName) => MASTER_RESPONSES_UZ.unknownPrice(productName),
     unknownStock: (productName) =>
       productName ? MASTER_RESPONSES_UZ.stockGeneralAvailable(productName) : 'Ha, mahsulot omborda mavjud.',
-    askProductOrCode: () => MASTER_RESPONSES_UZ.unspecifiedProductClarify,
+    askProductOrCode: () => 'Qaysi mahsulot yoki ip kodi bo‘yicha ma’lumot kerak edi?',
     askQuantity: (productName) =>
       productName ? `${productName} bo‘yicha qancha kerak bo’ladi?` : 'Qancha kerak bo’ladi?',
     complaintApology: () => MASTER_RESPONSES_UZ.complaint,
@@ -48,7 +48,7 @@ export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates>
     unknownPrice: (_productName) => 'Ҳозир аниқлаштириб бераман!',
     unknownStock: (productName) =>
       productName ? `Ҳа, ${productName} бор.` : 'Ҳа, маҳсулот омборда бор.',
-    askProductOrCode: () => 'Ҳозир аниқлаштириб бераман!',
+    askProductOrCode: () => 'Қайси маҳсулот ёки ип коди бўйича маълумот керак эди?',
     askQuantity: (productName) =>
       productName ? `${productName} бўйича қанча керак бўлади?` : 'Қанча керак бўлади?',
     complaintApology: () =>
@@ -64,8 +64,8 @@ export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates>
   ru: {
     unknownPrice: (_productName) => 'Сейчас уточню информацию!',
     unknownStock: (productName) =>
-      productName ? `Да, ${productName} есть в наличии.` : 'Да, товар в наличии на складе.',
-    askProductOrCode: () => 'Сейчас уточню информацию!',
+      productName ? `Да, ${productName} есть в наличии.` : 'Да, товар есть на складе.',
+    askProductOrCode: () => 'По какому товару или артикулу пряжи нужна информация?',
     askQuantity: (productName) =>
       productName ? `Какое количество ${productName} вам необходимо?` : 'Какое количество вам необходимо?',
     complaintApology: () =>
