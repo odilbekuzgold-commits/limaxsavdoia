@@ -86,10 +86,11 @@ export function createDashboardRouter(repos: Repositories): Router {
       const managerId = req.query.managerId as string | undefined;
       const dateRange = (req.query.dateRange as string) || '30d';
 
-      const [leads, customersRes, conversations] = await Promise.all([
+      const [leads, customersRes, conversations, allRegisteredManagers] = await Promise.all([
         repos.leads.findAll({}),
         repos.customers.findAll({ page: 1, limit: 1000 }),
         repos.conversations.findAll({}),
+        repos.managers.findAll({}),
       ]);
 
       const customers = customersRes.data;
@@ -264,12 +265,23 @@ export function createDashboardRouter(repos: Repositories): Router {
           percentage: currStats.total > 0 ? Math.round((p.count / currStats.total) * 100) : 0,
         }));
 
-      // Top managers dynamically computed from real assignedManagerIds
-      const managerStatsMap = new Map<string, { total: number; qual: number; won: number }>();
+      // Top managers dynamically computed from registered managers + real assignedManagerIds
+      const managerStatsMap = new Map<string, { name: string; total: number; qual: number; won: number }>();
+
+      // Initialize with all registered managers
+      for (const m of allRegisteredManagers) {
+        managerStatsMap.set(m.id, { name: m.name, total: 0, qual: 0, won: 0 });
+      }
+
       for (const l of currentLeads) {
         if (l.assignedManagerId) {
           const mId = l.assignedManagerId;
-          const stats = managerStatsMap.get(mId) || { total: 0, qual: 0, won: 0 };
+          const stats = managerStatsMap.get(mId) || {
+            name: `Menejer #${mId.length > 8 ? mId.slice(0, 6) : mId}`,
+            total: 0,
+            qual: 0,
+            won: 0,
+          };
           stats.total += 1;
           if (isQualified(l)) stats.qual += 1;
           if (l.stage === 'won' || l.stage === 'negotiation') stats.won += 1;
@@ -278,12 +290,10 @@ export function createDashboardRouter(repos: Repositories): Router {
       }
 
       const topManagers = Array.from(managerStatsMap.entries()).map(([id, stats]) => {
-        const maskedId = id.length > 8 ? id.slice(0, 6) : id;
-        const name = `Menejer #${maskedId}`;
         const tot = stats.total || 1;
         return {
           id,
-          name,
+          name: stats.name,
           totalLeads: stats.total,
           qualifiedLeads: stats.qual,
           qualificationRate: stats.total > 0 ? Math.round((stats.qual / tot) * 100) : 0,

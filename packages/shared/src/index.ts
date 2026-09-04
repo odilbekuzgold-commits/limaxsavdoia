@@ -138,6 +138,44 @@ export const ConversationSchema = z.object({
 });
 export type Conversation = z.infer<typeof ConversationSchema>;
 
+// Manager
+export const ManagerStatusEnum = z.enum(['ACTIVE', 'INACTIVE']);
+export type ManagerStatus = z.infer<typeof ManagerStatusEnum>;
+
+export const ManagerSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1, 'Manager name is required'),
+  role: z.string().default('Sotuv menejeri'),
+  phone: z.string().optional(),
+  telegramUsername: z.string().optional(),
+  telegramChatId: z.string().optional(),
+  status: ManagerStatusEnum.default('ACTIVE'),
+  isOnDuty: z.boolean().default(false),
+  specialties: z.array(z.string()).default([]),
+  maxActiveLeads: z.number().int().default(20),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+export type Manager = z.infer<typeof ManagerSchema>;
+
+export const CreateManagerSchema = ManagerSchema.omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type CreateManager = z.infer<typeof CreateManagerSchema>;
+
+export type UpdateManager = Partial<Omit<Manager, 'id' | 'createdAt' | 'updatedAt'>>;
+
+export interface ManagerWithStats extends Manager {
+  totalLeads: number;
+  qualifiedLeads: number;
+  activeHandoffs: number;
+  wonDeals: number;
+  conversionRate: number;
+}
+
+
 // Message
 export const MessageSchema = z.object({
   id: z.string().uuid(),

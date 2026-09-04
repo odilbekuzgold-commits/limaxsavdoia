@@ -113,3 +113,26 @@ export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const { apiUrl, token } = getApiConfig();
+  const headers: Record<string, string> = {};
+  if (token) headers.authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${apiUrl}${path}`, {
+    method: 'DELETE',
+    headers,
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    let errorMsg = `API DELETE request failed (${response.status})`;
+    try {
+      const errJson = await response.json();
+      if (errJson?.error?.message) errorMsg = errJson.error.message;
+    } catch { /* parse fallback */ }
+    throw new Error(errorMsg);
+  }
+  return response.json() as Promise<T>;
+}
+

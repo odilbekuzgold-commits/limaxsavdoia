@@ -1,20 +1,30 @@
+export const dynamic = 'force-dynamic';
+
 import { PageShell } from '../../../components/PageShell';
-import { TopManagersTable } from '../../../components/analytics/TopManagersTable';
+import {
+  ManagersClientContainer,
+  type ManagerItem,
+} from '../../../components/employees/ManagersClientContainer';
 import { apiGet } from '../../../lib/api';
-import type { DashboardOverviewData, DashboardTopManager } from '@limax/shared';
 
 export default async function EmployeesPage() {
-  let managers: DashboardTopManager[] = [];
+  let managers: ManagerItem[] = [];
+  let error = '';
+
   try {
-    const overview = await apiGet<{ data: DashboardOverviewData }>('/api/v1/dashboard/overview');
-    managers = overview.data.topManagers;
-  } catch {
-    // fallback
+    const res = await apiGet<{ data: ManagerItem[] }>('/api/v1/managers');
+    managers = res.data || [];
+  } catch (err: unknown) {
+    error = err instanceof Error ? err.message : 'Menejerlar ro‘yxati yuklanmadi';
   }
 
   return (
-    <PageShell title="Menejerlar" description="Sotuv menejerlari ro‘yxati va ularning KPI ko‘rsatkichlari">
-      <TopManagersTable managers={managers} />
+    <PageShell
+      title="Sotuv Menejerlari & Jamoa Boshqaruvi"
+      description="Limax Yarn sotuv jamoasi tarkibi, navbatchilik holati, biriktirilgan leadlar va har bir menejerning KPI ko‘rsatkichlari."
+    >
+      {error && <div className="data-error">{error}</div>}
+      <ManagersClientContainer initialManagers={managers} />
     </PageShell>
   );
 }

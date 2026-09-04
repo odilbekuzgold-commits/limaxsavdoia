@@ -30,6 +30,10 @@ import type {
   TelegramUpdateReceipt,
   AIUsageLog,
   GoogleSheetsSyncState,
+  Manager,
+  CreateManager,
+  UpdateManager,
+  ManagerStatus,
 } from './index.js';
 
 export interface KnowledgeIndexState {
@@ -100,6 +104,15 @@ export interface IHandoffRepository {
   create(data: Omit<Handoff, 'id' | 'createdAt' | 'updatedAt'>): Promise<Handoff>;
   update(id: string, data: Partial<Handoff>): Promise<Handoff | null>;
   claimManagerNotificationDelivery(id: string, timeoutMs?: number): Promise<boolean>;
+}
+
+export interface IManagerRepository {
+  findAll(params?: { status?: ManagerStatus; onDutyOnly?: boolean }): Promise<Manager[]>;
+  findById(id: string): Promise<Manager | null>;
+  create(data: CreateManager): Promise<Manager>;
+  update(id: string, data: UpdateManager): Promise<Manager | null>;
+  delete(id: string): Promise<boolean>;
+  setOnDuty(id: string, isOnDuty: boolean): Promise<Manager | null>;
 }
 
 export interface IProductRepository {
@@ -210,6 +223,7 @@ export interface Repositories {
   messages: IMessageRepository;
   leads: ILeadRepository;
   handoffs: IHandoffRepository;
+  managers: IManagerRepository;
   products: IProductRepository;
   productPrices: IProductPriceRepository;
   productInventory: IProductInventoryRepository;

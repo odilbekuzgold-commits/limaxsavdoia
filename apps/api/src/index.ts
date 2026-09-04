@@ -113,6 +113,7 @@ import { createPricingRouter } from './modules/pricing.js';
 import { createCertificatesRouter } from './modules/certificates.js';
 import { createMediaRouter } from './modules/media.js';
 import { createSettingsRouter } from './modules/settings.js';
+import { createManagersRouter } from './modules/managers.js';
 import { createDashboardRouter } from './modules/dashboard.js';
 import { TelegramClient } from '@limax/channel-adapters';
 import {
@@ -190,6 +191,7 @@ app.use('/api/v1/pricing', createPricingRouter(repos, driver, pool));
 app.use('/api/v1/certificates', createCertificatesRouter(repos));
 app.use('/api/v1/media', createMediaRouter(repos));
 app.use('/api/v1/settings', createSettingsRouter(repos));
+app.use('/api/v1/managers', createManagersRouter(repos.managers, repos.leads, repos.handoffs));
 app.use('/api/v1/dashboard', createDashboardRouter(repos));
 app.use(
   '/api/v1/webhooks/telegram',

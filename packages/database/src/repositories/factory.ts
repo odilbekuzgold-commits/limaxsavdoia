@@ -19,6 +19,7 @@ import {
   InMemorySalesSettingsRepository,
   InMemoryAuditLogRepository,
   InMemoryGoogleSheetsSyncRepository,
+  InMemoryManagerRepository,
 } from './memory/index.js';
 import {
   PgCustomerRepository,
@@ -39,6 +40,7 @@ import {
   PgSalesSettingsRepository,
   PgAuditLogRepository,
   PgGoogleSheetsSyncRepository,
+  PgManagerRepository,
 } from './pg/index.js';
 
 export type RepositoryDriver = 'memory' | 'postgres';
@@ -55,6 +57,7 @@ export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool | pg
       messages: new PgMessageRepository(pool),
       leads: new PgLeadRepository(pool),
       handoffs: new PgHandoffRepository(pool),
+      managers: new PgManagerRepository(pool),
       products: new PgProductRepository(pool),
       productPrices: new PgProductPriceRepository(pool),
       productInventory: new PgProductInventoryRepository(pool),
@@ -79,6 +82,7 @@ export function createRepositories(driver: RepositoryDriver, pool?: pg.Pool | pg
       messages: new InMemoryMessageRepository(),
       leads: new InMemoryLeadRepository(),
       handoffs: new InMemoryHandoffRepository(),
+      managers: new InMemoryManagerRepository(),
       products,
       productPrices: new InMemoryProductPriceRepository(products),
       productInventory: new InMemoryProductInventoryRepository(products),

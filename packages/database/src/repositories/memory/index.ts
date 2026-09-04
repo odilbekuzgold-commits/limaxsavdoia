@@ -16,3 +16,5 @@ export { InMemoryProductMediaRepository } from './product-media.repository.js';
 export { InMemorySalesSettingsRepository } from './sales-settings.repository.js';
 export { InMemoryAuditLogRepository } from './audit-log.repository.js';
 export { InMemoryGoogleSheetsSyncRepository } from './google-sheets-sync.repository.js';
+export { InMemoryManagerRepository } from './manager.repository.js';
+
