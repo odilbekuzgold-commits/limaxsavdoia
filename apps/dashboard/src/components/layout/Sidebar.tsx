@@ -13,16 +13,14 @@ interface NavItemDef {
 const NAV_ITEMS: NavItemDef[] = [
   { label: 'Asosiy panel', href: '/dashboard', icon: '⌂' },
   { label: 'Leadlar', href: '/dashboard/leads', icon: '↗' },
+  { label: 'Suhbatlar', href: '/dashboard/conversations', icon: '💬' },
+  { label: 'Mijozlar', href: '/dashboard/customers', icon: '👥' },
   { label: 'AI tahlil', href: '/dashboard/analytics', icon: '✦' },
   { label: 'Menejerlar', href: '/dashboard/employees', icon: '👤' },
-  { label: 'Mijozlar', href: '/dashboard/customers', icon: '👥' },
   { label: 'Mahsulotlar', href: '/dashboard/products', icon: '◇' },
-  { label: 'Manbalar', href: '#sources', icon: '🌐', disabled: true },
-  { label: 'Uchrashuvlar', href: '#meetings', icon: '📅', disabled: true },
-  { label: 'Namuna so‘rovlari', href: '#samples', icon: '📦', disabled: true },
-  { label: 'Takliflar', href: '#offers', icon: '📄', disabled: true },
-  { label: 'Hisobotlar', href: '#reports', icon: '📊', disabled: true },
-  { label: 'Sozlamalar', href: '/dashboard/settings', icon: '⚙' },
+  { label: 'Ombor qoldiqlari', href: '/dashboard/inventory', icon: '📦' },
+  { label: 'Bilimlar bazasi', href: '/dashboard/knowledge-base', icon: '📚' },
+  { label: 'Sozlamalar', href: '/dashboard/settings/sales', icon: '⚙' },
 ];
 
 export function Sidebar({ apiOnline = true }: { apiOnline?: boolean }) {
