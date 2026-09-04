@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { HeaderFilters, type FilterState } from './HeaderFilters';
 import { KpiCards } from './KpiCards';
 import { DonutCharts } from './DonutCharts';
@@ -16,14 +16,19 @@ interface DashboardClientContainerProps {
   initialData?: DashboardOverviewData | null;
   initialFilters: FilterState;
   apiOnline?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
 export function DashboardClientContainer({
   initialData,
   initialFilters,
+  title,
+  subtitle,
 }: DashboardClientContainerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
 
   const [filters, setFilters] = useState<FilterState>({
@@ -40,7 +45,7 @@ export function DashboardClientContainer({
     if (newFilters.dateRange) params.set('dateRange', newFilters.dateRange);
 
     startTransition(() => {
-      router.push(`/dashboard?${params.toString()}`);
+      router.push(`${pathname}?${params.toString()}`);
     });
   };
 
@@ -63,6 +68,8 @@ export function DashboardClientContainer({
         onChange={handleFilterChange}
         onRefresh={handleRefresh}
         loading={isPending}
+        title={title}
+        subtitle={subtitle}
       />
 
       {/* 5 KPI Cards */}

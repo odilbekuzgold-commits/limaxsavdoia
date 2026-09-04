@@ -2,7 +2,7 @@
 
 import { apiGet } from '../../lib/api';
 
-export type BusinessActionResult<T = any> = {
+export type BusinessActionResult<T = unknown> = {
   success: boolean;
   error?: string;
   data?: T;
@@ -12,8 +12,9 @@ export async function getConversationsAction(): Promise<BusinessActionResult<any
   try {
     const res = await apiGet<{ data: any[] }>('/api/v1/conversations');
     return { success: true, data: res.data || [] };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Suhbatlar yuklanmadi' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Suhbatlar yuklanmadi';
+    return { success: false, error: message };
   }
 }
 
@@ -21,8 +22,9 @@ export async function getConversationThreadAction(id: string): Promise<BusinessA
   try {
     const res = await apiGet<{ data: any }>(`/api/v1/conversations/${id}`);
     return { success: true, data: res.data };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Suhbat xabarlari yuklanmadi' };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Suhbat xabarlari yuklanmadi';
+    return { success: false, error: message };
   }
 }
 

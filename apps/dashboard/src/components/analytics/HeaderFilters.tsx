@@ -12,6 +12,8 @@ interface HeaderFiltersProps {
   onChange: (newFilters: FilterState) => void;
   onRefresh: () => void;
   loading?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
 export function HeaderFilters({
@@ -20,18 +22,20 @@ export function HeaderFilters({
   onChange,
   onRefresh,
   loading,
+  title,
+  subtitle,
 }: HeaderFiltersProps) {
   const isRu = filters.lang === 'ru';
+  const defaultTitle = isRu ? 'Аналитика Pre-sales Dashboard' : 'AI Tahlil & Pre-sales Analytics';
+  const defaultSubtitle = isRu
+    ? 'Показатели эффективности продаж и работы ИИ-менеджера LImax'
+    : 'LImax Yarn sotuv jarayonlari va AI menejeri samaradorligi ko‘rsatkichlari';
 
   return (
     <div className="header-bar">
       <div className="header-title">
-        <h1>{isRu ? 'Аналитика Pre-sales Dashboard' : 'Pre-sales Analytics Dashboard'}</h1>
-        <p>
-          {isRu
-            ? 'Показатели эффективности продаж и работы ИИ-менеджера LImax'
-            : 'LImax Yarn sotuv jarayonlari va AI menejeri samaradorligi ko‘rsatkichlari'}
-        </p>
+        <h1>{title || defaultTitle}</h1>
+        <p>{subtitle || defaultSubtitle}</p>
       </div>
 
       <div className="filter-group">
