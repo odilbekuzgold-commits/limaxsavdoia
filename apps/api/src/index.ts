@@ -121,6 +121,11 @@ import {
   TelegramPollingRunner,
 } from './modules/telegram/index.js';
 import { createGoogleSheetsRouter } from './modules/google-sheets/router.js';
+import {
+  GoogleSheetsClient,
+  GoogleSheetsSyncEngine,
+  REQUIRED_SPREADSHEET_ID,
+} from '@limax/integrations';
 
 import { loadBehaviorV2Config, createEmbeddingProvider } from '@limax/ai-engine';
 
@@ -223,6 +228,30 @@ if (telegramClient && env.TELEGRAM_UPDATE_MODE === 'polling') {
     logger.error({ err }, '[Telegram Polling] Polling startup error');
   });
 }
+
+// Background periodic Google Sheets sync (every 2 minutes)
+const syncClient = new GoogleSheetsClient({
+  spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID || REQUIRED_SPREADSHEET_ID,
+  serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  privateKey: process.env.GOOGLE_PRIVATE_KEY,
+});
+const syncEngine = new GoogleSheetsSyncEngine(syncClient, repos, driver, pool);
+
+const runPeriodicSync = async () => {
+  try {
+    const res = await syncEngine.runSync({ dryRun: false });
+    if (res.status === 'SUCCESS') {
+      logger.info({ counts: res.counts }, '[GoogleSheets] Background sync completed successfully');
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: msg }, '[GoogleSheets] Background sync warning (will retry)');
+  }
+};
+
+runPeriodicSync().catch(() => {});
+const syncInterval = setInterval(runPeriodicSync, 2 * 60 * 1000);
+syncInterval.unref();
 
 app.use((req: Request, res: Response) => {
   const requestId = (req.headers['x-request-id'] as string) || '';
