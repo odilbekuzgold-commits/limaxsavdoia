@@ -34,6 +34,10 @@ export async function updateSalesSettings(
 export function createSettingsRouter(repos: Repositories): Router {
   const router = Router();
 
+  router.get('/', (_req: Request, res: Response) => {
+    res.redirect(307, '/api/v1/settings/sales');
+  });
+
   router.get('/sales', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await getSalesSettings(repos);

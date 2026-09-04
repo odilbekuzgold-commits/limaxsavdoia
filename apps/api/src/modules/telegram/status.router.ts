@@ -13,8 +13,8 @@ export function createTelegramStatusRouter(
 ): Router {
   const router: Router = Router();
 
-  // GET /api/v1/integrations/telegram/status
-  router.get('/status', async (_req: Request, res: Response) => {
+  // GET /api/v1/integrations/telegram and /api/v1/integrations/telegram/status
+  const handleStatus = async (_req: Request, res: Response) => {
     let canConnectToBusiness = false;
     let verifiedBotUsername = botUsername || null;
 
@@ -45,7 +45,10 @@ export function createTelegramStatusRouter(
       lastUpdateAt: lastUpdateAt ? lastUpdateAt.toISOString() : null,
       lastErrorCode,
     });
-  });
+  };
+
+  router.get('/', handleStatus);
+  router.get('/status', handleStatus);
 
   return router;
 }

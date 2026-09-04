@@ -76,6 +76,10 @@ function getFilterDates(dateRange?: string): { start?: Date; end?: Date; prevSta
 export function createDashboardRouter(repos: Repositories): Router {
   const router: Router = Router();
 
+  router.get('/', (_req: Request, res: Response) => {
+    res.redirect(307, '/api/v1/dashboard/overview');
+  });
+
   // GET /api/v1/dashboard/overview
   router.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -121,6 +121,10 @@ export function createPricingRouter(
   router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
       const productId = (req.query.productId as string) || '';
+      if (!productId) {
+        res.json({ data: [] });
+        return;
+      }
       const result = await getProductPrices(repos, productId);
       res.json({ data: result });
     } catch (err) {
