@@ -14,6 +14,9 @@ export const VALID_SHEET_TABS = [
   'QA_HUMAN_MANAGER',
   'BUSINESS_RULES_CODEX',
   'CODEX_RUNTIME_MAP',
+  'Bilimlar_Bazasi',
+  'Knowledge',
+  'FAQ',
 ] as const;
 
 // Helper: parse string booleans
@@ -120,3 +123,32 @@ export const SheetSyncControlRowSchema = z.object({
   notes: z.string().optional(),
 });
 export type SheetSyncControlRow = z.infer<typeof SheetSyncControlRowSchema>;
+
+// 5. Knowledge Base Tab Schema (Bilimlar_Bazasi)
+export const SheetKnowledgeRowSchema = z.object({
+  rowNumber: z.number().int(),
+  title: z.string().min(1, 'title/question is required').transform((s) => s.trim()),
+  content: z.string().min(1, 'content/answer is required').transform((s) => s.trim()),
+  category: z.string().optional().default('Umumiy').transform((s) => s?.trim() || 'Umumiy'),
+  language: z.preprocess((v) => {
+    if (typeof v !== 'string' || !v.trim()) return 'uz';
+    const s = v.trim().toLowerCase();
+    if (s.includes('ru') || s.includes('рус')) return 'ru';
+    if (s.includes('en') || s.includes('ing')) return 'en';
+    return 'uz';
+  }, z.string()).default('uz'),
+  approvalStatus: z.preprocess((v) => {
+    if (typeof v !== 'string' || !v.trim()) return 'APPROVED';
+    const s = v.trim().toUpperCase();
+    if (s === 'TASDIQLANGAN' || s === 'APPROVED' || s === 'HA' || s === 'YES' || s === 'TRUE' || s === '1') return 'APPROVED';
+    if (s === 'DRAFT' || s === 'QORALAMA' || s === 'KUTILMOQDA' || s === 'PENDING') return 'DRAFT';
+    return s;
+  }, z.string().default('APPROVED')),
+  syncEnabled: z.preprocess((v) => {
+    if (v === undefined || v === null || v === '') return true;
+    return parseBoolean(v);
+  }, z.boolean().default(true)),
+  source: z.string().optional().default('GOOGLE_SHEETS'),
+});
+export type SheetKnowledgeRow = z.infer<typeof SheetKnowledgeRowSchema>;
+

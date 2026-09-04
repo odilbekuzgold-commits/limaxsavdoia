@@ -46,6 +46,14 @@ export function createGoogleSheetsRouter(options: GoogleSheetsRouterOptions): Ro
       const lastSuccessTime = latestSuccess?.lastSuccessAt ? new Date(latestSuccess.lastSuccessAt).getTime() : 0;
       const isStale = !lastSuccessTime || now - lastSuccessTime > 10 * 60 * 1000; // 10 minutes
 
+      let knowledgeCount = 0;
+      if (repos.knowledge) {
+        try {
+          const items = await repos.knowledge.findAll({});
+          knowledgeCount = items.length;
+        } catch {}
+      }
+
       res.status(200).json({
         spreadsheetId: REQUIRED_SPREADSHEET_ID,
         sheetUrl: `https://docs.google.com/spreadsheets/d/${REQUIRED_SPREADSHEET_ID}/edit`,
@@ -57,6 +65,7 @@ export function createGoogleSheetsRouter(options: GoogleSheetsRouterOptions): Ro
           products: latestSuccess?.productsCount || 0,
           prices: latestSuccess?.pricesCount || 0,
           inventory: latestSuccess?.inventoryCount || 0,
+          knowledge: knowledgeCount,
         },
         checksum: latestSuccess?.checksum || null,
         error: latest?.sanitizedError || null,

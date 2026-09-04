@@ -8,9 +8,11 @@ import {
   SheetProductRowSchema,
   SheetPriceRowSchema,
   SheetInventoryRowSchema,
+  SheetKnowledgeRowSchema,
   type SheetProductRow,
   type SheetPriceRow,
   type SheetInventoryRow,
+  type SheetKnowledgeRow,
 } from './schemas.js';
 import { applyStage17_2SourceCorrections, type CorrectionManifestItem } from './source-corrections.js';
 
@@ -29,6 +31,7 @@ export interface SyncResult {
     products: number;
     prices: number;
     inventory: number;
+    knowledge?: number;
   };
   details?: {
     productsAdded?: number;
@@ -36,6 +39,8 @@ export interface SyncResult {
     pricesCreated?: number;
     pricesUnchanged?: number;
     inventoryUpdated?: number;
+    knowledgeAdded?: number;
+    knowledgeUpdated?: number;
     skippedPending?: number;
     skippedDisabled?: number;
     manifest?: CorrectionManifestItem[];
@@ -63,7 +68,7 @@ export class GoogleSheetsSyncEngine {
 
     const normalizeHeader = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
     const normHeaders = rawRows[0].map(normalizeHeader);
-    const hasHeaders = normHeaders.some((h) => h.includes('code') || h.includes('status') || h.includes('name'));
+    const hasHeaders = normHeaders.some((h) => h.includes('code') || h.includes('status') || h.includes('name') || h.includes('title') || h.includes('savol') || h.includes('content') || h.includes('matn'));
 
     const findCol = (key: string): number => {
       const normKey = normalizeHeader(key);
@@ -83,6 +88,34 @@ export class GoogleSheetsSyncEngine {
       }
       if (normKey === 'reservedquantity') {
         const idx = normHeaders.findIndex((h) => h.includes('res') || h.includes('reserved'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'title') {
+        const idx = normHeaders.findIndex((h) => h.includes('title') || h.includes('savol') || h.includes('mavzu') || h.includes('question') || h.includes('topic') || h.includes('nomi') || h.includes('sarlavha'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'content') {
+        const idx = normHeaders.findIndex((h) => h.includes('content') || h.includes('matn') || h.includes('javob') || h.includes('answer') || h.includes('text') || h.includes('description') || h.includes('izoh') || h.includes('malumot'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'category') {
+        const idx = normHeaders.findIndex((h) => h.includes('category') || h.includes('kategoriya') || h.includes('bolim') || h.includes('section'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'language') {
+        const idx = normHeaders.findIndex((h) => h.includes('lang') || h.includes('til'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'approvalstatus') {
+        const idx = normHeaders.findIndex((h) => h.includes('status') || h.includes('tasdiq') || h.includes('holat'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'syncenabled') {
+        const idx = normHeaders.findIndex((h) => h.includes('sync') || h.includes('faol') || h.includes('active') || h.includes('sinxronlash'));
+        if (idx >= 0) return idx;
+      }
+      if (normKey === 'source') {
+        const idx = normHeaders.findIndex((h) => h.includes('source') || h.includes('manba'));
         if (idx >= 0) return idx;
       }
 
@@ -220,14 +253,67 @@ export class GoogleSheetsSyncEngine {
       }
     );
 
+    // 5. Parse Knowledge Tab (Bilimlar_Bazasi, Knowledge, or FAQ)
+    let rawKnowledge: string[][] = [];
+    let knowledgeTabFound = false;
+
+    const isKnowledgeHeader = (rows?: string[][]): boolean => {
+      if (!rows || rows.length <= 1) return false;
+      const headerStr = rows[0].map((s) => s.toLowerCase().replace(/[^a-z0-9]/g, '')).join(' ');
+      if (headerStr.includes('priceinventorycontrol') || headerStr.includes('narxyozuvlari') || headerStr.includes('productcode')) {
+        return false;
+      }
+      const hasTitle = rows[0].some((h) => {
+        const n = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return n.includes('title') || n.includes('savol') || n.includes('mavzu') || n.includes('sarlavha') || n.includes('question') || n.includes('nomi');
+      });
+      const hasContent = rows[0].some((h) => {
+        const n = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+        return n.includes('content') || n.includes('matn') || n.includes('javob') || n.includes('izoh') || n.includes('answer') || n.includes('malumot');
+      });
+      return hasTitle && hasContent;
+    };
+
+    for (const tabName of ['Bilimlar_Bazasi', 'Knowledge', 'FAQ']) {
+      try {
+        const rows = await this.client.readTab(tabName);
+        if (isKnowledgeHeader(rows)) {
+          rawKnowledge = rows;
+          knowledgeTabFound = true;
+          break;
+        }
+      } catch {
+        // Tab not found or error reading optional tab
+      }
+    }
+
+    const knowledgeParsed = knowledgeTabFound
+      ? this.parseRows<SheetKnowledgeRow>(
+          rawKnowledge,
+          SheetKnowledgeRowSchema,
+          {
+            title: 0,
+            content: 1,
+            category: 2,
+            language: 3,
+            approvalStatus: 4,
+            syncEnabled: 5,
+            source: 6,
+          }
+        )
+      : { valid: [], errors: [], skippedPending: 0, skippedDisabled: 0 };
+
+    const approvedKnowledge = knowledgeParsed.valid.filter((k) => k.approvalStatus === 'APPROVED' && k.syncEnabled);
+
     const allErrors = [
       ...productParsed.errors,
       ...priceParsed.errors,
       ...inventoryParsed.errors,
+      ...knowledgeParsed.errors,
     ];
 
-    const totalSkippedPending = productParsed.skippedPending + priceParsed.skippedPending + inventoryParsed.skippedPending;
-    const totalSkippedDisabled = productParsed.skippedDisabled + priceParsed.skippedDisabled + inventoryParsed.skippedDisabled;
+    const totalSkippedPending = productParsed.skippedPending + priceParsed.skippedPending + inventoryParsed.skippedPending + knowledgeParsed.skippedPending;
+    const totalSkippedDisabled = productParsed.skippedDisabled + priceParsed.skippedDisabled + inventoryParsed.skippedDisabled + knowledgeParsed.skippedDisabled;
 
     let approvedProducts = productParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
     let approvedPrices = priceParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
@@ -319,6 +405,12 @@ export class GoogleSheetsSyncEngine {
         avail: inv.availableQuantity,
         res: inv.reservedQuantity,
       })),
+      knowledge: approvedKnowledge.map((k) => ({
+        title: k.title,
+        content: k.content,
+        lang: k.language,
+        cat: k.category,
+      })),
     });
     const checksum = crypto.createHash('sha256').update(payloadForChecksum).digest('hex');
 
@@ -335,6 +427,7 @@ export class GoogleSheetsSyncEngine {
           products: approvedProducts.length,
           prices: approvedPrices.length,
           inventory: approvedInventory.length,
+          knowledge: approvedKnowledge.length,
         },
         details: {
           skippedPending: totalSkippedPending,
@@ -355,11 +448,14 @@ export class GoogleSheetsSyncEngine {
           products: approvedProducts.length,
           prices: approvedPrices.length,
           inventory: approvedInventory.length,
+          knowledge: approvedKnowledge.length,
         },
         details: {
           productsAdded: approvedProducts.length,
           pricesCreated: approvedPrices.length,
           inventoryUpdated: approvedInventory.length,
+          knowledgeAdded: approvedKnowledge.length,
+          knowledgeUpdated: 0,
           skippedPending: totalSkippedPending,
           skippedDisabled: totalSkippedDisabled,
           manifest,
@@ -374,6 +470,8 @@ export class GoogleSheetsSyncEngine {
       pricesCreated: 0,
       pricesUnchanged: 0,
       inventoryUpdated: 0,
+      knowledgeAdded: 0,
+      knowledgeUpdated: 0,
       skippedPending: totalSkippedPending,
       skippedDisabled: totalSkippedDisabled,
       manifest,
@@ -508,6 +606,58 @@ export class GoogleSheetsSyncEngine {
         details.inventoryUpdated++;
       }
 
+      // Sync Knowledge Base (Upsert into knowledge_items and ensure chunks)
+      if (approvedKnowledge.length > 0 && txRepos.knowledge) {
+        const existingKnowledge = await txRepos.knowledge.findAll({});
+        const knowledgeMap = new Map<string, (typeof existingKnowledge)[0]>();
+        for (const ek of existingKnowledge) {
+          if (ek.title) knowledgeMap.set(ek.title.trim().toLowerCase(), ek);
+        }
+
+        for (const k of approvedKnowledge) {
+          const titleKey = k.title.trim().toLowerCase();
+          const existing = knowledgeMap.get(titleKey);
+
+          if (!existing) {
+            const created = await txRepos.knowledge.create({
+              title: k.title.trim(),
+              content: k.content.trim(),
+              language: (k.language || 'uz') as any,
+              status: k.approvalStatus === 'APPROVED' ? 'APPROVED' : 'DRAFT',
+              source: k.source || 'GOOGLE_SHEETS',
+            });
+            await txRepos.knowledge.replaceChunks(created.id, [
+              {
+                chunkIndex: 0,
+                content: k.content.trim(),
+                language: (k.language || 'uz') as any,
+                metadata: { title: k.title.trim(), category: k.category, source: 'GOOGLE_SHEETS' },
+              },
+            ]);
+            details.knowledgeAdded = (details.knowledgeAdded || 0) + 1;
+          } else {
+            await txRepos.knowledge.update(existing.id, {
+              title: k.title.trim(),
+              content: k.content.trim(),
+              language: (k.language || 'uz') as any,
+              status: k.approvalStatus === 'APPROVED' ? 'APPROVED' : 'DRAFT',
+              source: k.source || 'GOOGLE_SHEETS',
+              approvedBy: '00000000-0000-0000-0000-000000000001',
+              approvedAt: now,
+            });
+            await txRepos.knowledge.replaceChunks(existing.id, [
+              {
+                chunkIndex: 0,
+                content: k.content.trim(),
+                language: (k.language || 'uz') as any,
+                metadata: { title: k.title.trim(), category: k.category, source: 'GOOGLE_SHEETS' },
+              },
+            ]);
+            details.knowledgeUpdated = (details.knowledgeUpdated || 0) + 1;
+          }
+        }
+      }
+
       // Record successful sync state
       await txRepos.googleSheetsSync.create({
         spreadsheetId: REQUIRED_SPREADSHEET_ID,
@@ -532,6 +682,7 @@ export class GoogleSheetsSyncEngine {
         products: approvedProducts.length,
         prices: approvedPrices.length,
         inventory: approvedInventory.length,
+        knowledge: approvedKnowledge.length,
       },
       details,
       lastSuccessAt: now,

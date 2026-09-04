@@ -13,6 +13,9 @@ export interface GoogleSheetsClientConfig {
     QA_HUMAN_MANAGER?: string[][];
     BUSINESS_RULES_CODEX?: string[][];
     CODEX_RUNTIME_MAP?: string[][];
+    Bilimlar_Bazasi?: string[][];
+    Knowledge?: string[][];
+    FAQ?: string[][];
   };
 }
 
@@ -84,9 +87,9 @@ export class GoogleSheetsClient {
     return this.accessToken;
   }
 
-  async readTab(tabName: 'Products' | 'Prices' | 'Inventory' | 'Sync_Control'): Promise<string[][]> {
-    if (this.mockData && this.mockData[tabName]) {
-      return this.mockData[tabName] || [];
+  async readTab(tabName: 'Products' | 'Prices' | 'Inventory' | 'Sync_Control' | 'Bilimlar_Bazasi' | 'Knowledge' | 'FAQ' | string): Promise<string[][]> {
+    if (this.mockData && (this.mockData as Record<string, string[][]>)[tabName]) {
+      return (this.mockData as Record<string, string[][]>)[tabName] || [];
     }
 
     if (!this.serviceAccountEmail || !this.privateKey) {

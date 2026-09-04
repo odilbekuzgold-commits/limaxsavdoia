@@ -294,4 +294,40 @@ describe('Stage 17: Google Sheets Business Sync — Unit Tests', () => {
     });
     assert.ok(router);
   });
+
+  // 11. Bilimlar_Bazasi Knowledge Base Tab Synchronization
+  it('11. Syncs Bilimlar_Bazasi tab into knowledge items with chunk creation', async () => {
+    const repos = createRepositories('memory');
+    const mockClient = new GoogleSheetsClient({
+      spreadsheetId: REQUIRED_SPREADSHEET_ID,
+      mockData: {
+        Products: [
+          ['Product Code', 'Product Name', 'Category', 'Description', 'Unit', 'Active', 'Approval Status', 'Sync Enabled'],
+          ['TEST-1', 'Mahsulot 1', 'Yarn', 'Desc', 'kg', 'TRUE', 'APPROVED', 'TRUE'],
+        ],
+        Prices: [],
+        Inventory: [],
+        Sync_Control: [],
+        Bilimlar_Bazasi: [
+          ['Sarlavha', 'Matn', 'Kategoriya', 'Til', 'Status', 'Sinxronlash'],
+          ['Yetkazib berish shartlari', 'Toshkent bo‘ylab 24 soat ichida yetkaziladi.', 'Logistika', 'uz', 'APPROVED', 'TRUE'],
+          ['To‘lov usullari', 'Pul o‘tkazish (perchislenie) va naqd to‘lov qabul qilinadi.', 'Moliya', 'uz', 'APPROVED', 'TRUE'],
+          ['Qoralama savol', 'Bu javob hali tasdiqlanmagan.', 'Sinov', 'uz', 'DRAFT', 'TRUE'],
+        ],
+      },
+    });
+
+    const engine = new GoogleSheetsSyncEngine(mockClient, repos, 'memory');
+    const result = await engine.runSync({ dryRun: false });
+
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.status, 'SUCCESS');
+    assert.strictEqual(result.counts.knowledge, 2);
+    assert.strictEqual(result.details?.knowledgeAdded, 2);
+
+    const allKnowledge = await repos.knowledge.findAll({});
+    assert.strictEqual(allKnowledge.length, 2);
+    assert.ok(allKnowledge.some((k) => k.title === 'Yetkazib berish shartlari'));
+    assert.ok(allKnowledge.some((k) => k.title === 'To‘lov usullari'));
+  });
 });
