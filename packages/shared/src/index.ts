@@ -240,7 +240,7 @@ export const ProductPriceSchema = z.object({
   currency: z.string().default('USD'),
   paymentType: PaymentTypeEnum.default('LEGACY'),
   unit: z.string().default('kg'),
-  minimumQuantity: z.number().gte(0).default(1),
+  minimumQuantity: z.number().gte(0).nullable().optional(),
   validFrom: z.date(),
   validUntil: z.date().optional(),
   active: z.boolean().default(true),
@@ -450,14 +450,14 @@ export interface StructuredProductFact {
     amount: number;
     currency: string;
     unit: string;
-    minimumQuantity: number;
+    minimumQuantity?: number | null;
     validFrom: string;
     validUntil?: string;
   } | null;
   inventory?: {
-    availableQuantity: number;
-    reservedQuantity: number;
-    netAvailable: number;
+    availableQuantity: number | null;
+    reservedQuantity: number | null;
+    netAvailable: number | null;
     status: ProductInventory['status'];
     warehouse?: string | null;
   } | null;

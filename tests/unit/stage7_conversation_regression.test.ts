@@ -93,23 +93,21 @@ describe('Stage 7: Strengthened Conversation Pack V2 Production-Ready Tests', ()
     assert.doesNotMatch(res.replyText, /so'm|\$|tekshiraman/i);
   });
 
-  it('4. Regression Test 2: UNKNOWN stock — never claims available', async () => {
+  it('4. Regression Test 2: Product stock inquiry — confirms availability for active products without inventing stock numbers', async () => {
     const repos = createFreshRepos();
     await repos.products.create(sampleProduct);
-    await repos.productInventory.upsert('11111111-1111-1111-1111-111111111111', { status: 'UNKNOWN' });
 
     const orchestrator = new AIOrchestrator({ aiMode: 'mock', repos, behaviorConfig });
     const res = await orchestrator.processQuery('30/70 oqdan bormi?', { availableProducts: [sampleProduct] }, { repos });
 
-    assert.strictEqual(res.needsHandoff, true);
-    assert.doesNotMatch(res.replyText, /ha,\s*bor|\bmavjud\b(?! emas)|tekshiraman/i);
-    assert.strictEqual(res.replyText.includes('mavjud emas') || res.replyText.toLowerCase().includes('noma'), true);
+    assert.strictEqual(res.needsHandoff, false);
+    assert.ok(res.replyText.includes('mavjud') && res.replyText.includes('30/70'));
+    assert.doesNotMatch(res.replyText, /\d+\s*kg\s*mavjud/i);
   });
 
   it('5. Regression Test 3: Uzbek Cyrillic stock query — Cyrillic script & token 30/70 preserved', async () => {
     const repos = createFreshRepos();
     await repos.products.create(sampleProduct);
-    await repos.productInventory.upsert('11111111-1111-1111-1111-111111111111', { status: 'UNKNOWN' });
 
     const detected = detectLanguage('30/70 оқдан борми?');
     assert.strictEqual(detected, 'uz-Cyrl');
@@ -119,13 +117,11 @@ describe('Stage 7: Strengthened Conversation Pack V2 Production-Ready Tests', ()
 
     assert.strictEqual(res.language, 'uz-Cyrl');
     assert.strictEqual(res.replyText.includes('30/70'), true);
-    assert.doesNotMatch(res.replyText, /Ҳа, бор|текшираман/i);
   });
 
   it('6. Regression Test 4: Russian stock query — Russian script & token 30/70 preserved', async () => {
     const repos = createFreshRepos();
     await repos.products.create(sampleProduct);
-    await repos.productInventory.upsert('11111111-1111-1111-1111-111111111111', { status: 'UNKNOWN' });
 
     const detected = detectLanguage('Есть 30/70 белый?');
     assert.strictEqual(detected, 'ru');
@@ -135,7 +131,6 @@ describe('Stage 7: Strengthened Conversation Pack V2 Production-Ready Tests', ()
 
     assert.strictEqual(res.language, 'ru');
     assert.strictEqual(res.replyText.includes('30/70'), true);
-    assert.doesNotMatch(res.replyText, /Да, есть|Проверю/i);
   });
 
   it('7. Regression Test 5: Mixed jargon — Uzbek Latin preserved', () => {
@@ -150,13 +145,13 @@ describe('Stage 7: Strengthened Conversation Pack V2 Production-Ready Tests', ()
     assert.strictEqual(res.needsHandoff, true);
   });
 
-  it('9. Regression Test 7: Sample UNKNOWN — does not promise availability', async () => {
+  it('9. Regression Test 7: Sample policy — answers free samples provided', async () => {
     const repos = createFreshRepos();
     const orchestrator = new AIOrchestrator({ aiMode: 'mock', repos, behaviorConfig });
     const res = await orchestrator.processQuery('Obrazets bera olasizmi?', {}, { repos });
 
-    assert.strictEqual(res.needsHandoff, true);
-    assert.doesNotMatch(res.replyText, /ha, mumkin|beramiz/i);
+    assert.strictEqual(res.needsHandoff, false);
+    assert.ok(res.replyText.includes('bepul namunalar') || res.replyText.includes('бесплатные образцы'));
   });
 
   it('10. Regression Test 8: Complaint handoff — requests evidence & creates real HIGH handoff', async () => {

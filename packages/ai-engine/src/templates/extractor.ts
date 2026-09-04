@@ -11,7 +11,12 @@ export function extractEntities(text: string): ExtractedEntities {
   const productRe = new RegExp(PROTECTED_PRODUCT_TOKEN_RE.source, 'gi');
   const productMatches = text.match(productRe);
   if (productMatches && productMatches.length > 0) {
-    entities.product = productMatches[0].toUpperCase();
+    let matched = productMatches[0].toUpperCase();
+    if (matched === '300LIK' || matched === '300') matched = '300D';
+    if (matched === '300D96') matched = '300D/96';
+    if (matched === 'W300D96') matched = 'W300D/96';
+    if (matched === '75D36') matched = '75D/36';
+    entities.product = matched;
   } else {
     // Check secondary product keywords
     const secondaryMatch = text.match(/\b(polyester|poliyester|spandex|neylon|naylon|rezinka|bobina|pux)\b/i);

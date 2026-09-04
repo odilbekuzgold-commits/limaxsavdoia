@@ -9,7 +9,6 @@ import {
 import {
   AIOrchestrator,
   detectLanguage,
-  getLocalizedTemplate,
 } from '@limax/ai-engine';
 
 const orchestrator = new AIOrchestrator();
@@ -29,6 +28,128 @@ export interface ProcessTelegramUpdateResult {
   reason?: string;
 }
 
+function getManagerReasonLabel(handoffReason?: string, intent?: string): string {
+  if (intent === 'complaint') return 'Mijoz shikoyat qildi';
+  if (intent === 'manager_request') return 'Mijoz menejer bilan gaplashmoqchi';
+
+  switch (handoffReason) {
+    case 'FALLBACK_FAILED':
+    case 'PROVIDER_FAILURE':
+      return 'Bot javob bera olmadi';
+    case 'MISSING_ACTIVE_PRICE':
+      return 'Amaldagi narxni aniqlashtirish kerak';
+    case 'NO_RELIABLE_KNOWLEDGE':
+      return 'Ma’lumotni aniqlashtirish kerak';
+    case 'CUSTOMER_REQUESTED_MANAGER':
+      return 'Mijoz menejer bilan gaplashmoqchi';
+    default:
+      return 'Murojaat menejer ko‘rigini talab qildi';
+  }
+}
+
+function formatTashkentTime(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Tashkent',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || '';
+  return `${value('year')}-${value('month')}-${value('day')} ${value('hour')}:${value('minute')}`;
+}
+
+function getLanguageLabel(language?: string): string {
+  switch (language) {
+    case 'uz-Cyrl':
+      return 'Uzbek (Kirill)';
+    case 'ru':
+      return 'Russian';
+    case 'tg':
+      return 'Tajik';
+    case 'kk':
+      return 'Kazakh';
+    case 'ky':
+      return 'Kyrgyz';
+    default:
+      return 'Uzbek';
+  }
+}
+
+export function formatManagerHandoffNotification(input: {
+  customerName: string;
+  promptText: string;
+  telegramId?: string;
+  username?: string;
+  phone?: string;
+  companyName?: string;
+  location?: string;
+  language?: string;
+  product?: string;
+  color?: string;
+  quantity?: string;
+  deadline?: string;
+  leadTemperature?: 'COLD' | 'WARM' | 'HOT';
+  handoffReason?: string;
+  intent?: string;
+  createdAt?: Date;
+}): string {
+  const truncatedPrompt = input.promptText.length > 300
+    ? `${input.promptText.slice(0, 300)}...`
+    : input.promptText;
+  const priorityLabel = input.intent === 'complaint' ? 'Yuqori' : 'O‘rta';
+  const username = input.username
+    ? (input.username.startsWith('@') ? input.username : `@${input.username}`)
+    : undefined;
+  const lines = ['🚨 Yangi handoff', '', `👤 Mijoz: ${input.customerName}`];
+
+  if (input.phone) lines.push(`📱 Telefon: ${input.phone}`);
+  if (username) lines.push(`🔗 Username: ${username}`);
+  if (input.telegramId) lines.push(`🆔 Telegram ID: ${input.telegramId}`);
+
+  lines.push('');
+  if (input.companyName) lines.push(`🏢 Kompaniya: ${input.companyName}`);
+  if (input.location) lines.push(`📍 Hudud: ${input.location}`);
+  lines.push('🌐 Kanal: Telegram');
+  lines.push(`🗣 Til: ${getLanguageLabel(input.language)}`);
+
+  if (input.product || input.color || input.quantity || input.deadline) lines.push('');
+  if (input.product) lines.push(`🧵 Qiziqqan mahsulot: ${input.product}`);
+  if (input.color) lines.push(`🎨 Rang: ${input.color}`);
+  if (input.quantity) lines.push(`📦 Miqdor: ${input.quantity}`);
+  if (input.deadline) lines.push(`⏰ Qachonga kerak: ${input.deadline}`);
+
+  lines.push('');
+  lines.push(`❗ Sabab: ${getManagerReasonLabel(input.handoffReason, input.intent)}`);
+  lines.push(`📩 Oxirgi xabar: “${truncatedPrompt}”`);
+  if (input.leadTemperature) lines.push(`🔥 Lead: ${input.leadTemperature}`);
+  lines.push(`⚡ Ustuvorlik: ${priorityLabel}`);
+  lines.push('');
+  lines.push(`🕒 Vaqt: ${formatTashkentTime(input.createdAt || new Date())}`);
+
+  return lines.join('\n');
+}
+
+function extractHandoffColor(text: string): string | undefined {
+  if (/\b(mix\s*color|mic\s*color|mixed\s*color|аралаш\s*ранг)\b/iu.test(text)) return 'MIX COLOR';
+  if (/\b(white|oq|ок|белый|белая)\b/iu.test(text)) return 'WHITE';
+  if (/\b(black|qora|кора|чёрный|черный|чёрная|черная)\b/iu.test(text)) return 'BLACK';
+  return undefined;
+}
+
+function extractHandoffDeadline(text: string): string | undefined {
+  if (/\b(bugun|бугун|today|сегодня)\b/iu.test(text)) return 'Bugun';
+  if (/\b(ertaga|эртага|tomorrow|завтра)\b/iu.test(text)) return 'Ertaga';
+
+  const numericDate = text.match(/\b\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?\b/u)?.[0];
+  if (numericDate) return numericDate;
+
+  const namedDate = text.match(/\b\d{1,2}\s*-?\s*(?:yanvar|fevral|mart|aprel|may|iyun|iyul|avgust|sentabr|oktabr|noyabr|dekabr)\b/iu)?.[0];
+  return namedDate;
+}
+
 async function deliverHandoffNotifications(options: {
   conv: Conversation;
   customerId: string;
@@ -40,6 +161,15 @@ async function deliverHandoffNotifications(options: {
   chatId: string;
   senderId: string;
   updateId: number;
+  username?: string;
+  phone?: string;
+  companyName?: string;
+  location?: string;
+  product?: string;
+  color?: string;
+  quantity?: string;
+  deadline?: string;
+  leadTemperature?: 'COLD' | 'WARM' | 'HOT';
   repos: Repositories;
   client?: TelegramClient;
   managerChatId?: string;
@@ -49,12 +179,21 @@ async function deliverHandoffNotifications(options: {
   const {
     conv,
     customerName,
-    detectedLang,
     promptText,
     ackText,
     businessConnectionId,
     chatId,
     senderId,
+    detectedLang,
+    username,
+    phone,
+    companyName,
+    location,
+    product,
+    color,
+    quantity,
+    deadline,
+    leadTemperature,
     repos,
     client,
     managerChatId,
@@ -157,21 +296,23 @@ async function deliverHandoffNotifications(options: {
       const targetManagerChatId = managerChatId || process.env.TELEGRAM_MANAGER_CHAT_ID;
 
       if (targetManagerChatId && client) {
-        const channelLabel = businessConnectionId ? 'Telegram Business' : 'Telegram';
-        const truncatedPrompt = promptText.length > 300 ? `${promptText.slice(0, 300)}...` : promptText;
-        const priorityLabel = intent === 'complaint' ? 'HIGH' : 'MEDIUM';
-
-        const notificationText =
-          `🚨 Yangi handoff\n\n` +
-          `Mijoz: ${customerName}\n` +
-          `Telegram ID: ${senderId}\n` +
-          `Conversation ID: ${conv.id}\n` +
-          `Til: ${detectedLang}\n` +
-          `Sababi: ${handoffReason || activeHandoff.reason || 'AI Handoff Triggered'}\n` +
-          `Ustuvorlik: ${priorityLabel}\n` +
-          `Oxirgi xabar: ${truncatedPrompt}\n` +
-          `Kanal: ${channelLabel}\n` +
-          `Vaqt: ${new Date().toISOString()}`;
+        const notificationText = formatManagerHandoffNotification({
+          customerName,
+          promptText,
+          telegramId: senderId,
+          username,
+          phone,
+          companyName,
+          location,
+          language: detectedLang,
+          product,
+          color,
+          quantity,
+          deadline,
+          leadTemperature,
+          handoffReason: handoffReason || activeHandoff.reason,
+          intent,
+        });
 
         try {
           await sendTelegramTextMessage(client, {
@@ -359,43 +500,13 @@ export async function processTelegramUpdate(
     metadata: normalized.rawMetadata,
   });
 
-  // 9. State Check: If conversation is WAITING_MANAGER, retry any pending handoff delivery then suppress AI sales replies
-  if (conv.status !== 'AI_ACTIVE') {
-    const convMessages = await repos.messages.findByConversationId(conv.id);
-    const hasSentAck = convMessages.some(
-      (m) =>
-        m.senderType === 'ai' &&
-        m.status === 'SENT' &&
-        (m.metadata as Record<string, unknown> | undefined)?.messageKind === 'handoff_ack'
-    );
-
-    const convHandoffs = await repos.handoffs.findByConversationId(conv.id);
-    const activeHandoff = convHandoffs.find((h) => h.status === 'PENDING');
-    const hasNotifiedManager =
-      (activeHandoff?.metadata as Record<string, unknown> | undefined)?.managerNotificationStatus === 'SENT';
-
-    if (!hasSentAck || !hasNotifiedManager) {
-      const ackText = getLocalizedTemplate(detectedLang).managerHandoff();
-      await deliverHandoffNotifications({
-        conv,
-        customerId,
-        customerName,
-        detectedLang,
-        promptText: normalized.text,
-        ackText,
-        businessConnectionId: normalized.businessConnectionId,
-        chatId: normalized.chatId,
-        senderId: normalized.senderId,
-        updateId,
-        repos,
-        client,
-        managerChatId,
-      });
-    }
-
+  // 9. State Check: Suppress standard AI replies if conversation is WAITING_MANAGER, BLOCKED, or CLOSED
+  if (conv.status === 'BLOCKED' || conv.status === 'CLOSED') {
     await repos.telegramReceipts.create({ updateId, updateType: 'message_saved_ai_inactive', status: 'PROCESSED' });
     return { status: 'PROCESSED', updateId, reason: `AI_INACTIVE_FOR_STATUS_${conv.status}` };
   }
+
+
 
   // 10. AI Response & Guardrail Processing via AIOrchestrator
   const convMessages = await repos.messages.findByConversationId(conv.id);
@@ -414,69 +525,115 @@ export async function processTelegramUpdate(
 
   const orchestratorResult = await orchestrator.processQuery(normalized.text, aiContext, { repos });
 
-  // 11. Handoff Delivery Check: Customer Localized Acknowledgment & Manager Group Notification
-  if (orchestratorResult.suppressAutoReply || orchestratorResult.needsHandoff) {
-    const ackText = orchestratorResult.replyText;
+  // 10.5. Automatic Lead Capture & Qualification into Dashboard
+  const textLower = (normalized.text || '').toLowerCase();
+  const qtyMatch = textLower.match(/(\d+(?:\.\d+)?)\s*(kg|tonna|tn|karobka|bobina|dona)/i);
+  const detectedQuantity = qtyMatch ? `${qtyMatch[1]} ${qtyMatch[2]}` : undefined;
+  const detectedProduct =
+    orchestratorResult.leadSignals?.productNeed ||
+    (textLower.includes('30/70') ? '30/70' : textLower.includes('40100') ? '40100K' : textLower.includes('spun') ? 'Spun 32S' : undefined);
+  const recentCustomerText = convMessages
+    .filter((message) => message.senderType === 'customer')
+    .slice(-6)
+    .map((message) => message.content)
+    .join(' ');
+  const detectedColor = extractHandoffColor(recentCustomerText);
+  const detectedDeadline = extractHandoffDeadline(recentCustomerText);
+  let productForNotification = detectedProduct;
+  let leadTemperature: 'COLD' | 'WARM' | 'HOT' = detectedQuantity ? 'HOT' : 'WARM';
 
-    // Update conversation status to WAITING_MANAGER
+  if (detectedProduct || detectedQuantity || orchestratorResult.needsHandoff) {
+    try {
+      const allLeads = await repos.leads.findAll({});
+      const existingLead = allLeads.find((l) => l.customerId === customerId);
+
+      if (!productForNotification && existingLead?.productInterest) {
+        productForNotification = existingLead.productInterest;
+      }
+      if (!detectedQuantity && existingLead?.temperature) {
+        leadTemperature = existingLead.temperature;
+      }
+
+      const productInterest = detectedProduct ? `${detectedProduct}${detectedQuantity ? ` (${detectedQuantity})` : ''}` : 'Ip mahsuloti';
+      const temperature = leadTemperature;
+      const score = detectedQuantity ? 85 : 65;
+
+      if (!existingLead) {
+        await repos.leads.create({
+          customerId,
+          conversationId: conv.id,
+          productInterest,
+          temperature,
+          score,
+          stage: detectedQuantity ? 'proposal' : 'qualifying',
+          nextAction: 'Menejer bog‘lanishi va buyurtmani rasmiylashtirishi kerak',
+        });
+      } else {
+        await repos.leads.update(existingLead.id, {
+          productInterest: productInterest || existingLead.productInterest,
+          temperature,
+          score: Math.max(existingLead.score || 0, score),
+          stage: detectedQuantity ? 'proposal' : existingLead.stage,
+          nextAction: 'Mijoz yangi miqdor/mahsulot so‘radi',
+        });
+      }
+    } catch (leadErr) {
+      console.warn('[Lead Capture Non-Blocking Error]:', leadErr);
+    }
+  }
+
+  // 11. Handoff Recording (Notify manager in background if needed)
+  let handoffDelivery: { ackSent: boolean; managerNotified: boolean } | null = null;
+
+  if (orchestratorResult.needsHandoff) {
     await repos.conversations.update(conv.id, {
       status: 'WAITING_MANAGER',
       lastMessageAt: new Date(),
     });
 
-    const { ackSent } = await deliverHandoffNotifications({
-      conv,
-      customerId,
-      customerName,
-      detectedLang,
-      promptText: normalized.text,
-      ackText,
-      businessConnectionId: normalized.businessConnectionId,
-      chatId: normalized.chatId,
-      senderId: normalized.senderId,
-      updateId,
-      repos,
-      client,
-      managerChatId,
-      handoffReason: orchestratorResult.handoffReason,
-      intent: orchestratorResult.intent,
-    });
-
-    await repos.telegramReceipts.create({
-      updateId,
-      updateType: 'handoff_delivered',
-      status: ackSent ? 'PROCESSED' : 'FAILED',
-    });
-
-    return {
-      status: 'PROCESSED',
-      updateId,
-      updateType: 'message',
-      reason: 'HANDOFF_DELIVERED',
-    };
+    try {
+      handoffDelivery = await deliverHandoffNotifications({
+        conv,
+        customerId,
+        customerName,
+        detectedLang,
+        promptText: normalized.text,
+        ackText: orchestratorResult.replyText,
+        businessConnectionId: normalized.businessConnectionId,
+        chatId: normalized.chatId,
+        senderId: normalized.senderId,
+        updateId,
+        username: contact.username || normalized.senderUsername,
+        phone: contact.phone,
+        product: productForNotification,
+        color: detectedColor,
+        quantity: detectedQuantity,
+        deadline: detectedDeadline,
+        leadTemperature,
+        repos,
+        client,
+        managerChatId,
+        handoffReason: orchestratorResult.handoffReason,
+        intent: orchestratorResult.intent,
+      });
+    } catch (err) {
+      console.warn('[Handoff Notification Non-Blocking Error]:', err);
+    }
   }
 
-  // 12. Send Standard Outgoing Reply via Telegram Client
+  // 12. Send Standard Outgoing Reply to Customer via Telegram Client
   const replyText = orchestratorResult.replyText;
 
-  // Duplicate Reply Prevention: If the bot already sent the exact same reply in the last 2 minutes, suppress duplicate reply
-  const lastAiMsg = [...convMessages].reverse().find((m) => m.senderType === 'ai');
-  const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-  if (lastAiMsg && lastAiMsg.content === replyText && new Date(lastAiMsg.createdAt) > twoMinutesAgo) {
-    await repos.telegramReceipts.create({ updateId, updateType: 'duplicate_reply_suppressed', status: 'SKIPPED' });
-    return { status: 'PROCESSED', updateId, reason: 'DUPLICATE_REPLY_SUPPRESSED' };
-  }
-
-  if (client) {
+  if (client && replyText && (!orchestratorResult.needsHandoff || !handoffDelivery?.ackSent)) {
     try {
-      if (process.env.RESPONSE_DELAY_ENABLED !== 'false' && process.env.NODE_ENV !== 'test') {
-        const minMs = parseInt(process.env.RESPONSE_DELAY_MIN_MS || '2000', 10);
-        const maxMs = parseInt(process.env.RESPONSE_DELAY_MAX_MS || '6000', 10);
-        const perCharMs = parseInt(process.env.RESPONSE_DELAY_PER_CHAR_MS || '25', 10);
+      if (process.env.RESPONSE_DELAY_ENABLED === 'true') {
+        const minMs = parseInt(process.env.RESPONSE_DELAY_MIN_MS || '500', 10);
+        const maxMs = parseInt(process.env.RESPONSE_DELAY_MAX_MS || '1500', 10);
+        const perCharMs = parseInt(process.env.RESPONSE_DELAY_PER_CHAR_MS || '10', 10);
 
         const charDelay = replyText.length * perCharMs;
         const randomJitter = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
-        const totalDelayMs = Math.min(15000, charDelay + randomJitter);
+        const totalDelayMs = Math.min(3000, charDelay + randomJitter);
 
         await new Promise((resolve) => setTimeout(resolve, totalDelayMs));
       }
@@ -487,6 +644,7 @@ export async function processTelegramUpdate(
         text: replyText,
         sendTyping: true,
       });
+      console.log(`[Telegram Sent Success] Sent reply to ${normalized.chatId}: ${replyText.substring(0, 60)}...`);
 
       await repos.messages.create({
         conversationId: conv.id,
@@ -498,6 +656,7 @@ export async function processTelegramUpdate(
       });
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[Telegram Send Error]:', errMsg);
       await repos.messages.create({
         conversationId: conv.id,
         senderType: 'ai',
@@ -507,7 +666,7 @@ export async function processTelegramUpdate(
         metadata: { error: errMsg },
       });
     }
-  } else {
+  } else if (replyText) {
     // Development / Test mode without client -> NOT_SENT
     await repos.messages.create({
       conversationId: conv.id,
@@ -515,6 +674,7 @@ export async function processTelegramUpdate(
       content: replyText,
       contentType: 'text',
       status: 'NOT_SENT',
+      metadata: {},
     });
   }
 

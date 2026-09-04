@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { REQUIRED_SPREADSHEET_ID } from './schemas.js';
+import { REQUIRED_SPREADSHEET_ID, getSpreadsheetId } from './schemas.js';
 
 export interface GoogleSheetsClientConfig {
   spreadsheetId: string;
@@ -10,6 +10,9 @@ export interface GoogleSheetsClientConfig {
     Prices?: string[][];
     Inventory?: string[][];
     Sync_Control?: string[][];
+    QA_HUMAN_MANAGER?: string[][];
+    BUSINESS_RULES_CODEX?: string[][];
+    CODEX_RUNTIME_MAP?: string[][];
   };
 }
 
@@ -22,8 +25,9 @@ export class GoogleSheetsClient {
   private mockData?: GoogleSheetsClientConfig['mockData'];
 
   constructor(config: GoogleSheetsClientConfig) {
-    if (config.spreadsheetId !== REQUIRED_SPREADSHEET_ID) {
-      throw new Error(`Invalid Spreadsheet ID: expected '${REQUIRED_SPREADSHEET_ID}', got '${config.spreadsheetId}'`);
+    const requiredId = getSpreadsheetId();
+    if (config.spreadsheetId !== requiredId && config.spreadsheetId !== REQUIRED_SPREADSHEET_ID) {
+      throw new Error(`Invalid Spreadsheet ID: expected '${requiredId}', got '${config.spreadsheetId}'`);
     }
     this.spreadsheetId = config.spreadsheetId;
     this.serviceAccountEmail = config.serviceAccountEmail;
@@ -85,6 +89,18 @@ export class GoogleSheetsClient {
       return this.mockData[tabName] || [];
     }
 
+    if (!this.serviceAccountEmail || !this.privateKey) {
+      // Public / Shared Google Sheet GViz CSV fetch fallback
+      const encodedTab = encodeURIComponent(tabName);
+      const url = `https://docs.google.com/spreadsheets/d/${this.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodedTab}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch live Google Sheet tab '${tabName}' via GViz CSV: ${res.status} ${res.statusText}`);
+      }
+      const csvText = await res.text();
+      return this.parseCsvToGrid(csvText);
+    }
+
     const token = await this.getAccessToken();
     const encodedTab = encodeURIComponent(tabName);
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${this.spreadsheetId}/values/${encodedTab}!A1:Z500`;
@@ -100,11 +116,38 @@ export class GoogleSheetsClient {
         throw new Error(`Google Sheet tab '${tabName}' not found`);
       }
       const errText = await res.text();
-      throw new Error(`Google Sheets API error for tab '${tabName}': ${res.status} ${errText}`);
+      throw new Error(`Google Sheets API error (${res.status}): ${errText}`);
     }
 
     const data = (await res.json()) as { values?: string[][] };
     return data.values || [];
+  }
+
+  private parseCsvToGrid(csv: string): string[][] {
+    const lines = csv.trim().split(/\r?\n/);
+    return lines.map((line) => {
+      const row: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (c === ',' && !inQuotes) {
+          row.push(current);
+          current = '';
+        } else {
+          current += c;
+        }
+      }
+      row.push(current);
+      return row;
+    });
   }
 
   getSpreadsheetId(): string {

@@ -7,7 +7,7 @@ export class InMemoryProductRepository implements IProductRepository {
   async findAll(params: { category?: string; activeOnly?: boolean }): Promise<Product[]> {
     return Array.from(this.db.values()).filter((p) => {
       const catMatch = params.category ? p.category.toLowerCase().includes(params.category.toLowerCase()) : true;
-      const actMatch = params.activeOnly ? p.active === true : true;
+      const actMatch = params.activeOnly ? p.active !== false : true;
       return catMatch && actMatch;
     });
   }
@@ -20,6 +20,7 @@ export class InMemoryProductRepository implements IProductRepository {
     const now = new Date();
     const product: Product = {
       ...data,
+      active: data.active !== undefined ? data.active : true,
       aiRecommendable: data.aiRecommendable !== undefined ? data.aiRecommendable : true,
       id: (data as any).id || randomUUID(),
       createdAt: now,

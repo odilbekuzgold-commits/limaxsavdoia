@@ -14,8 +14,9 @@ import { GeminiProviderAdapter } from './providers/gemini.provider.js';
 import { ClaudeProviderAdapter } from './providers/claude.provider.js';
 import { MockAIProviderAdapter } from './providers/mock.provider.js';
 import { loadBehaviorV2Config, type BehaviorV2Config } from './behavior.schema.js';
-import { getLocalizedTemplate } from './localization/templates.js';
+import { getTemplates } from './localization/templates.js';
 import { TemplateQARouter } from './templates/router.js';
+import { MASTER_RESPONSES_UZ } from './templates/master-responses.js';
 
 import type { EmbeddingProvider } from './embeddings/types.js';
 import { MockEmbeddingProvider } from './embeddings/mock.embedding.js';
@@ -47,7 +48,14 @@ export class AIOrchestrator {
   private behaviorConfig: BehaviorV2Config;
   private embeddingProvider: EmbeddingProvider;
 
-  constructor(config?: AIOrchestratorConfig) {
+  constructor(configOrRepos?: AIOrchestratorConfig | Repositories, maybeConfig?: AIOrchestratorConfig) {
+    let config: AIOrchestratorConfig | undefined = maybeConfig;
+    if (configOrRepos && ((configOrRepos as any).products || (configOrRepos as any).conversations)) {
+      this.repos = configOrRepos as Repositories;
+    } else {
+      config = configOrRepos as AIOrchestratorConfig;
+      this.repos = config?.repos;
+    }
     this.aiMode = config?.aiMode || (process.env.AI_MODE as 'mock' | 'real') || 'mock';
     const primaryName = (config?.primaryProviderName || process.env.AI_PRIMARY_PROVIDER || 'openai') as 'openai' | 'gemini' | 'claude' | 'mock';
     const fallbackName = (config?.fallbackProviderName || process.env.AI_FALLBACK_PROVIDER || 'gemini') as 'openai' | 'gemini' | 'claude' | 'mock';
@@ -56,7 +64,6 @@ export class AIOrchestrator {
     this.fallbackAdapter = this.resolveAdapter(fallbackName);
     this.timeoutMs = config?.timeoutMs || 30000;
     this.confidenceThreshold = config?.confidenceThreshold || 0.65;
-    this.repos = config?.repos;
     this.behaviorConfig = config?.behaviorConfig || loadBehaviorV2Config();
     this.embeddingProvider = config?.embeddingProvider || (this.aiMode === 'mock' ? new MockEmbeddingProvider() : createEmbeddingProvider());
   }
@@ -85,26 +92,11 @@ export class AIOrchestrator {
   ): Promise<AIStructuredResult & { suppressAutoReply?: boolean }> {
     const repos = options?.repos || this.repos;
     const lang = context.preferredLanguage || detectLanguage(prompt);
-    const templates = getLocalizedTemplate(lang);
+    const templates = getTemplates(lang);
     const lowerPrompt = prompt.toLowerCase();
 
-    // 1. Check existing WAITING_MANAGER state
-    if (context.conversationId && repos) {
-      const conv = await repos.conversations.findById(context.conversationId);
-      if (conv && conv.status === 'WAITING_MANAGER') {
-        return {
-          replyText: templates.managerHandoff(),
-          language: lang,
-          intent: 'manager_active',
-          confidence: 1.0,
-          needsHandoff: true,
-          handoffReason: 'CONVERSATION_WAITING_MANAGER',
-          suppressAutoReply: true,
-          leadSignals: {},
-          usedKnowledgeIds: [],
-        };
-      }
-    }
+    // 1. Existing WAITING_MANAGER check - Bypass suppression so bot continues replying to user inquiries
+    // (Manager notification can still be active without muting AI responses)
 
     // 2. Guardrail & Prompt Injection Pre-Check
     const guard = applyGuardrails(prompt, { lastResponse: context.lastResponse });
@@ -126,6 +118,33 @@ export class AIOrchestrator {
       return this.enforceActionHonesty(res, options?.actionExecuted, templates);
     }
 
+    // ── 0. IDENTITY Intent (Zero Handoff, Strict Assistant Identity across uz-Latn, uz-Cyrl, ru) ──
+    const isIdentity =
+      /^(sen\s+(ai|bot|robot|kim)|siz\s+(ai|bot|robot|kim)|ai\s*misan|botmisan|botmisiz|aimisiz|kim\s*bu|ты\s*(бот|ии|искусственный|кто)|вы\s*(бот|ии|кто)|сен\s*(аи|бот|ким)|сиз\s*(аи|бот|ким)|ким\s*бу|кто\s*ты|вы\s*бот)/i.test(
+        lowerPrompt.trim()
+      ) ||
+      /^(ai\?|bot\?|kim\?|кто\?|sen\s*kimsan|сен\s*кимсан|кто\s*ты)$/i.test(lowerPrompt.trim()) ||
+      lowerPrompt.includes('sen ai misan') ||
+      lowerPrompt.includes('сен аи мисан') ||
+      lowerPrompt.includes('sen kimsan') ||
+      lowerPrompt.includes('сен кимсан') ||
+      lowerPrompt.includes('ты бот') ||
+      lowerPrompt.includes('кто ты') ||
+      lowerPrompt.includes('kim bu') ||
+      lowerPrompt.includes('ким бу');
+
+    if (isIdentity) {
+      return {
+        replyText: templates.identityResponse(),
+        language: lang,
+        intent: 'bot_identity',
+        confidence: 0.99,
+        needsHandoff: false,
+        leadSignals: {},
+        usedKnowledgeIds: [],
+      };
+    }
+
     if (guard.triggerHandoff && guard.reason === 'COMPLAINT_HANDOFF') {
       const res = await this.formatAndRecordHandoff(
         {
@@ -145,47 +164,10 @@ export class AIOrchestrator {
       return this.enforceActionHonesty(res, options?.actionExecuted, templates);
     }
 
-    if (guard.triggerHandoff && guard.reason === 'SAMPLE_UNVERIFIED_HANDOFF') {
-      const res = await this.formatAndRecordHandoff(
-        {
-          replyText: templates.sampleUnverified(),
-          language: lang,
-          intent: 'sample_request',
-          confidence: 0.8,
-          needsHandoff: true,
-          handoffReason: 'SAMPLE_UNVERIFIED',
-          leadSignals: {},
-          usedKnowledgeIds: [],
-        },
-        context,
-        repos
-      );
-      return this.enforceActionHonesty(res, options?.actionExecuted, templates);
-    }
-
-    // 3. Manager direct request
-    if (lowerPrompt.includes('menejer') || lowerPrompt.includes('menedjer') || lowerPrompt.includes('manager') || lowerPrompt.includes('менеджер')) {
-      const res = await this.formatAndRecordHandoff(
-        {
-          replyText: templates.managerHandoff(),
-          language: lang,
-          intent: 'manager_request',
-          confidence: 0.95,
-          needsHandoff: true,
-          handoffReason: 'CUSTOMER_MANAGER_REQUEST',
-          leadSignals: {},
-          usedKnowledgeIds: [],
-        },
-        context,
-        repos
-      );
-      return this.enforceActionHonesty(res, options?.actionExecuted, templates);
-    }
-
-    // 3.5. Assemble Structured PostgreSQL Business Facts (Priority 1 Truth)
+    // 3. Assemble Structured PostgreSQL Business Facts (Priority 1 Truth)
     let availableProducts: Product[] = context.availableProducts || [];
     if (repos && availableProducts.length === 0) {
-      availableProducts = await repos.products.findAll({});
+      availableProducts = await repos.products.findAll({ activeOnly: true });
     }
 
     const activeProducts = availableProducts.filter((p) => p.active !== false);
@@ -198,45 +180,7 @@ export class AIOrchestrator {
       structuredBusinessFacts: structuredFacts,
     };
 
-    // Stale Business Data Check for Price and Stock Queries
-    const isPriceOrStockQuery =
-      lowerPrompt.includes('narxi') ||
-      lowerPrompt.includes('price') ||
-      lowerPrompt.includes('moq') ||
-      lowerPrompt.includes('ombor') ||
-      lowerPrompt.includes('stock') ||
-      lowerPrompt.includes('bormi') ||
-      lowerPrompt.includes('борми') ||
-      lowerPrompt.includes('есть') ||
-      lowerPrompt.includes('почём') ||
-      lowerPrompt.includes('сколько');
-
-    if (isPriceOrStockQuery && repos?.googleSheetsSync) {
-      const latestSync = await repos.googleSheetsSync.getLatestSuccess();
-      if (latestSync?.lastSuccessAt) {
-        const lastSyncTime = new Date(latestSync.lastSuccessAt).getTime();
-        const isStale = Date.now() - lastSyncTime > 10 * 60 * 1000;
-        if (isStale) {
-          const res = await this.formatAndRecordHandoff(
-            {
-              replyText: `Maʼlumotlar yangilanmoqda. Narx va ombor qoldigʻini aniqlashtirish uchun tez orada menejerimiz siz bilan bogʻlanadi.`,
-              language: lang,
-              intent: lowerPrompt.includes('narxi') || lowerPrompt.includes('price') ? 'product_price' : 'product_stock',
-              confidence: 0.5,
-              needsHandoff: true,
-              handoffReason: 'STALE_BUSINESS_DATA',
-              leadSignals: {},
-              usedKnowledgeIds: [],
-            },
-            context,
-            repos
-          );
-          return this.enforceActionHonesty(res, options?.actionExecuted, templates);
-        }
-      }
-    }
-
-    // 3.6. Template Q&A Router Stage (Priority 0 — Zero Cost / No AI Provider Call)
+    // 3.1. Template Q&A Router Stage (Priority 0 — Zero Cost / Business Rules & Deterministic Routing)
     const templateRouter = new TemplateQARouter();
     const templateResult = await templateRouter.routeQuery(prompt, templateContext, {
       repos,
@@ -260,8 +204,59 @@ export class AIOrchestrator {
       return this.enforceActionHonesty(templateResult, options?.actionExecuted, templates);
     }
 
+    // 3.2. Safety Guardrails & Handoff Interception
+    if (guard.triggerHandoff && guard.reason === 'SAMPLE_UNVERIFIED_HANDOFF') {
+      const res = await this.formatAndRecordHandoff(
+        {
+          replyText: templates.sampleUnverified(),
+          language: lang,
+          intent: 'sample_request',
+          confidence: 0.8,
+          needsHandoff: true,
+          handoffReason: 'SAMPLE_UNVERIFIED',
+          leadSignals: {},
+          usedKnowledgeIds: [],
+        },
+        context,
+        repos
+      );
+      return this.enforceActionHonesty(res, options?.actionExecuted, templates);
+    }
+
+    // 3.3. Manager direct request
+    if (lowerPrompt.includes('menejer') || lowerPrompt.includes('menedjer') || lowerPrompt.includes('manager') || lowerPrompt.includes('менеджер')) {
+      const res = await this.formatAndRecordHandoff(
+        {
+          replyText: templates.managerHandoff(),
+          language: lang,
+          intent: 'manager_request',
+          confidence: 0.95,
+          needsHandoff: true,
+          handoffReason: 'CUSTOMER_MANAGER_REQUEST',
+          leadSignals: {},
+          usedKnowledgeIds: [],
+        },
+        context,
+        repos
+      );
+      return this.enforceActionHonesty(res, options?.actionExecuted, templates);
+    }
+
     // 4.1. Fast Direct Product Resolution for Price / Stock Queries
     const matchedProducts = matchProducts(prompt, activeProducts);
+    const isPriceOrStockQuery =
+      lowerPrompt.includes('narxi') ||
+      lowerPrompt.includes('narx') ||
+      lowerPrompt.includes('qancha') ||
+      lowerPrompt.includes('price') ||
+      lowerPrompt.includes('moq') ||
+      lowerPrompt.includes('ombor') ||
+      lowerPrompt.includes('stock') ||
+      lowerPrompt.includes('bormi') ||
+      lowerPrompt.includes('борми') ||
+      lowerPrompt.includes('есть') ||
+      lowerPrompt.includes('почём') ||
+      lowerPrompt.includes('сколько');
 
     if (isPriceOrStockQuery) {
       if (matchedProducts.length > 0) {
@@ -271,48 +266,14 @@ export class AIOrchestrator {
         const isStockQuery = lowerPrompt.includes('ombor') || lowerPrompt.includes('stock') || lowerPrompt.includes('bormi') || lowerPrompt.includes('борми') || lowerPrompt.includes('есть');
         const isPriceQuery = lowerPrompt.includes('narxi') || lowerPrompt.includes('price') || lowerPrompt.includes('moq') || lowerPrompt.includes('почём') || lowerPrompt.includes('сколько');
 
-        // Stock truth check
+        // Stock truth check (Stage 17.4: Active products are available)
         if (isStockQuery && !isPriceQuery) {
-          if (!fact?.inventory || fact.inventory.status === 'UNKNOWN') {
-            const res = await this.formatAndRecordHandoff(
-              {
-                replyText: templates.unknownStock(prod.name),
-                language: lang,
-                intent: 'product_stock',
-                confidence: 0.5,
-                needsHandoff: true,
-                handoffReason: 'STOCK_STATUS_UNKNOWN',
-                leadSignals: { productNeed: prod.name },
-                usedKnowledgeIds: [],
-              },
-              context,
-              repos
-            );
-            return this.enforceActionHonesty(res, options?.actionExecuted, templates);
-          }
-
-          if (fact.inventory.status === 'OUT_OF_STOCK' || fact.inventory.netAvailable <= 0) {
-            const res = await this.formatAndRecordHandoff(
-              {
-                replyText: `${prod.name} ayni paytda omborda mavjud emas. Buyurtma qilish yoki keyingi partiya muddatini bilish uchun menejerimiz bog'lanadi.`,
-                language: lang,
-                intent: 'product_stock',
-                confidence: 0.95,
-                needsHandoff: true,
-                handoffReason: 'INVENTORY_STATUS_OUT_OF_STOCK',
-                leadSignals: { productNeed: prod.name },
-                usedKnowledgeIds: [],
-              },
-              context,
-              repos
-            );
-            return this.enforceActionHonesty(res, options?.actionExecuted, templates);
-          }
-
-          // Positive stock
+          // Active product is available (No inventory numbers)
           return this.enforceActionHonesty(
             {
-              replyText: `${prod.name} omborda mavjud (${fact.inventory.netAvailable} kg qoldiq). Buyurtma miqdorini bildirsangiz, rasmiylashtirishda yordam beraman.`,
+              replyText: lang === 'ru'
+                ? `Да, ${prod.name} есть. Какое количество вам нужно?`
+                : MASTER_RESPONSES_UZ.stockAvailable(prod.name),
               language: lang,
               intent: 'product_stock',
               confidence: 0.98,
@@ -325,35 +286,40 @@ export class AIOrchestrator {
           );
         }
 
+        const asksCash = /naqd|cash|налич/i.test(lowerPrompt);
+        const asksTransfer = /o['‘’]?tkazma|otkazma|bank|perechis|перечисл/i.test(lowerPrompt);
+        if (isPriceQuery && !asksCash && !asksTransfer) {
+          return {
+            replyText: lang === 'ru'
+              ? `Для ${prod.name} нужна цена наличными или по перечислению?`
+              : MASTER_RESPONSES_UZ.priceClarifyPaymentType(prod.name),
+            language: lang,
+            intent: 'payment_type_clarification',
+            confidence: 0.99,
+            needsHandoff: false,
+            leadSignals: { productNeed: prod.name },
+            usedKnowledgeIds: [],
+          };
+        }
+
         // Price truth check (Strict: NO legacy products.price fallback when pricing table is available!)
         let activePriceVal: number | null = null;
-        let activeCurrency = 'USD';
-        let activeUnit = 'kg';
-        let minQty = 1;
 
         if (fact?.activePrice) {
           activePriceVal = fact.activePrice.amount;
-          activeCurrency = fact.activePrice.currency;
-          activeUnit = fact.activePrice.unit;
-          minQty = fact.activePrice.minimumQuantity;
         } else if (repos && repos.productPrices) {
           const pObj = await repos.productPrices.findActiveByProductId(prod.id);
           if (pObj && pObj.active) {
             activePriceVal = pObj.price;
-            activeCurrency = pObj.currency;
-            activeUnit = pObj.unit;
-            minQty = pObj.minimumQuantity;
           }
         } else if (!repos && prod.price && prod.price > 0) {
           activePriceVal = prod.price;
-          activeCurrency = prod.currency || 'USD';
-          minQty = prod.minimumOrder || 1;
         }
 
         if (activePriceVal === null || activePriceVal <= 0) {
           const res = await this.formatAndRecordHandoff(
             {
-              replyText: `${prod.name} uchun amaldagi narx bazada tasdiqlanmagan. Aniq narx va tijoriy taklif uchun menejerimiz siz bilan bog'lanadi.`,
+              replyText: MASTER_RESPONSES_UZ.unknownPrice(prod.name),
               language: lang,
               intent: 'product_price',
               confidence: 0.5,
@@ -369,10 +335,12 @@ export class AIOrchestrator {
         }
 
         // Active validated price
-        const reply = `${prod.name} narxi 1 ${activeUnit} uchun ${activePriceVal} ${activeCurrency}. Minimal buyurtma (MOQ): ${minQty} ${activeUnit}.`;
+        const priceReply = asksCash
+          ? MASTER_RESPONSES_UZ.priceCashOnly(prod.name, activePriceVal)
+          : MASTER_RESPONSES_UZ.priceTransferOnly(prod.name, activePriceVal);
         return this.enforceActionHonesty(
           {
-            replyText: reply,
+            replyText: priceReply,
             language: lang,
             intent: 'product_price',
             confidence: 0.98,
@@ -628,18 +596,29 @@ export class AIOrchestrator {
       try {
         const invObj = await repos.productInventory.findByProductId(p.id);
         if (invObj) {
-          const avail = invObj.availableQuantity ?? 0;
-          const res = invObj.reservedQuantity ?? 0;
-          const net = Math.max(0, avail - res);
-          const status = avail === 0 || net === 0 ? 'OUT_OF_STOCK' : invObj.status;
+          const isUnknown = invObj.status === 'UNKNOWN' || invObj.availableQuantity === null || typeof invObj.availableQuantity !== 'number';
+          if (isUnknown) {
+            inventory = {
+              availableQuantity: null,
+              reservedQuantity: null,
+              netAvailable: null,
+              status: 'UNKNOWN',
+              warehouse: invObj.warehouse || null,
+            };
+          } else {
+            const avail = invObj.availableQuantity;
+            const res = invObj.reservedQuantity ?? 0;
+            const net = Math.max(0, avail - res);
+            const status = net <= 0 || invObj.status === 'OUT_OF_STOCK' ? 'OUT_OF_STOCK' : 'IN_STOCK';
 
-          inventory = {
-            availableQuantity: avail,
-            reservedQuantity: res,
-            netAvailable: net,
-            status,
-            warehouse: invObj.warehouse || null,
-          };
+            inventory = {
+              availableQuantity: avail,
+              reservedQuantity: res,
+              netAvailable: net,
+              status,
+              warehouse: invObj.warehouse || null,
+            };
+          }
         }
       } catch {
         inventory = null;
@@ -674,30 +653,19 @@ export class AIOrchestrator {
   private guardStructuredFacts(
     result: AIStructuredResult,
     facts: StructuredBusinessFacts,
-    templates: ReturnType<typeof getLocalizedTemplate>
+    templates: ReturnType<typeof getTemplates>
   ): AIStructuredResult {
     // If LLM hallucinates prices or available stock for products where DB has UNKNOWN or OUT_OF_STOCK
     const replyLower = result.replyText.toLowerCase();
 
-    // Check if reply mentions positive stock when DB says OUT_OF_STOCK
+    // Master rule: active products are always presented as available; inventory is not customer-facing.
     for (const p of facts.products) {
-      if (p.inventory?.status === 'OUT_OF_STOCK' && (replyLower.includes(p.name.toLowerCase()) || (p.code && replyLower.includes(p.code.toLowerCase())))) {
-        if (replyLower.includes('omborda bor') || replyLower.includes('mavjud') || replyLower.includes('в наличии')) {
-          return {
-            ...result,
-            replyText: `${p.name} ayni paytda omborda mavjud emas. Buyurtma berish uchun menejerimiz bog'lanadi.`,
-            needsHandoff: true,
-            handoffReason: 'POST_GUARD_OUT_OF_STOCK_OVERRIDE',
-          };
-        }
-      }
-
       // Check if price is unconfirmed but LLM gave a specific price
       if (!p.activePrice && (replyLower.includes(p.name.toLowerCase()) || (p.code && replyLower.includes(p.code.toLowerCase())))) {
         if (result.intent === 'product_price' && /\d+(\.\d+)?\s*(usd|\$|so'm|сум)/i.test(result.replyText)) {
           return {
             ...result,
-            replyText: `${p.name} uchun amaldagi narx bazada tasdiqlanmagan. Aniq narxni menejerimiz ma'lum qiladi.`,
+            replyText: MASTER_RESPONSES_UZ.unknownPrice(p.name),
             needsHandoff: true,
             handoffReason: 'POST_GUARD_UNCONFIRMED_PRICE_OVERRIDE',
           };
@@ -711,7 +679,7 @@ export class AIOrchestrator {
   private enforceActionHonesty(
     result: AIStructuredResult & { suppressAutoReply?: boolean },
     actionExecuted: boolean | undefined,
-    templates: ReturnType<typeof getLocalizedTemplate>
+    templates: ReturnType<typeof getTemplates>
   ): AIStructuredResult & { suppressAutoReply?: boolean } {
     const protectedRegex = /(tekshiraman|aniqlab beraman|yuboraman|проверю|отправлю)/i;
     if (!actionExecuted && protectedRegex.test(result.replyText)) {

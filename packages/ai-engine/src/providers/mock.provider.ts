@@ -1,6 +1,7 @@
 import type { AIContext, AIStructuredResult, SupportedLanguage } from '@limax/shared';
 import { detectLanguage } from '../index.js';
 import type { IAIProviderAdapter, ProviderRequestOptions, ProviderRawResponse } from './types.js';
+import { MASTER_RESPONSES_UZ } from '../templates/master-responses.js';
 
 // ──────────────────────────────────────────────
 // Mojibake guard: verify no corrupted chars in strings
@@ -118,7 +119,7 @@ function buildReply(
             ? 'Chem mogu pomoch?'
             : isCyrl
             ? 'Qanday yordam bera olaman?'
-            : 'Qanday yordam bera olaman?',
+            : MASTER_RESPONSES_UZ.greetingOngoing,
           intent: 'general_inquiry',
           confidence: 0.9,
           needsHandoff: false,
@@ -130,7 +131,7 @@ function buildReply(
           ? 'Zdravstvuyte! Pomogayu s informaciyey o poliefirnoy pryazhe LImax. Po kakomu produktu nuzhna informaciya?'
           : isCyrl
           ? "Assalomu alaykum! LImax ip mahsulotlari bo'yicha yordam beraman. Qaysi mahsulot bo'yicha ma'lumot kerak?"
-          : "Assalomu alaykum! LImax ip mahsulotlari bo'yicha yordam beraman. Qaysi mahsulot bo'yicha ma'lumot kerak?",
+          : MASTER_RESPONSES_UZ.greetingNew,
         intent: 'general_inquiry',
         confidence: 0.95,
         needsHandoff: false,
@@ -194,7 +195,7 @@ function buildReply(
             ? `Tsena ${productToken} utochnyaetsya. Menedzher svyazhetsya s vami.`
             : isCyrl
             ? `${productToken} narxi tasdiqlanmagan. Menejer siz bilan bog'lanadi.`
-            : `${productToken} narxi tasdiqlanmagan. Menejer siz bilan bog'lanadi.`,
+            : MASTER_RESPONSES_UZ.priceClarifyPaymentType(productToken),
           intent: 'product_price',
           confidence: 0.7,
           needsHandoff: true,
@@ -238,13 +239,13 @@ function buildReply(
           };
         }
       }
-      // Unknown stock — never hallucinate, say UNKNOWN
+      // Master rule: ask which yarn; active catalog items are treated as available.
       return {
         replyText: isRu
           ? 'Nalichie: UNKNOWN. Kakoye produkt interesует?'
           : isCyrl
           ? 'Qoldiq: UNKNOWN. Qaysi mahsulot kerak edi?'
-          : 'Qoldiq: UNKNOWN. Qaysi mahsulot kerak edi?',
+          : MASTER_RESPONSES_UZ.unspecifiedProductClarify,
         intent: 'product_stock',
         confidence: 0.75,
         needsHandoff: false,
@@ -259,7 +260,7 @@ function buildReply(
           ? 'Po voprosu obraztsa svyazhem vas s menedzherom.'
           : isCyrl
           ? "Namuna bo'yicha menejer bilan bog'laymiz."
-          : "Namuna bo'yicha menejer bilan bog'laymiz.",
+          : MASTER_RESPONSES_UZ.sampleFree,
         intent: 'sample_request',
         confidence: 0.85,
         needsHandoff: true,
@@ -274,7 +275,7 @@ function buildReply(
           ? 'Katalog otpravim cherez menedzhera. Kakoye produkt interesuet?'
           : isCyrl
           ? 'Katalog menejer orqali yuboriladi. Qaysi mahsulot qiziqtiradi?'
-          : 'Katalog menejer orqali yuboriladi. Qaysi mahsulot qiziqtiradi?',
+          : MASTER_RESPONSES_UZ.catalogHandoff,
         intent: 'general_inquiry',
         confidence: 0.8,
         needsHandoff: false,
@@ -288,7 +289,7 @@ function buildReply(
           ? 'Peredayu vas menedzheru. Pozhaluysta, ozhidayte.'
           : isCyrl
           ? 'Menejerga ulaymiz. Kutib turing.'
-          : 'Menejerga ulaymiz. Kutib turing.',
+          : MASTER_RESPONSES_UZ.managerHandoff,
         intent: 'general_inquiry',
         confidence: 0.95,
         needsHandoff: true,
@@ -303,7 +304,7 @@ function buildReply(
           ? 'Izvinite za neudobstvo. Mozhete otpravit foto ili video?'
           : isCyrl
           ? 'Noqulaylik uchun uzr. Rasm yoki video yuborasizmi?'
-          : 'Noqulaylik uchun uzr. Rasm yoki video yuborasizmi?',
+          : MASTER_RESPONSES_UZ.complaint,
         intent: 'complaint',
         confidence: 0.95,
         needsHandoff: true,

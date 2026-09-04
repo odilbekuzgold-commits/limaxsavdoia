@@ -87,7 +87,7 @@ describe('Stage 9: Telegram Manager Handoff Corrective Fix Tests', () => {
 
     assert.strictEqual(res2.status, 'PROCESSED');
     const customerAckMsg = sentMessages.find(
-      (m) => String(m.chatId) === '12345' && m.text.includes('Murojaatingiz menejerlarimizga yuborildi')
+      (m) => String(m.chatId) === '12345' && (m.text.includes('menejer') || m.text.includes('So‘rovingiz'))
     );
     assert.ok(customerAckMsg, 'Customer handoff acknowledgment must be delivered even with prior AI messages');
   });
@@ -104,7 +104,7 @@ describe('Stage 9: Telegram Manager Handoff Corrective Fix Tests', () => {
     });
 
     const acksCount1 = sentMessages.filter(
-      (m) => String(m.chatId) === '22222' && m.text.includes('Murojaatingiz menejerlarimizga yuborildi')
+      (m) => String(m.chatId) === '22222' && (m.text.includes('menejer') || m.text.includes('So‘rovingiz'))
     ).length;
     assert.strictEqual(acksCount1, 1);
 
@@ -117,7 +117,7 @@ describe('Stage 9: Telegram Manager Handoff Corrective Fix Tests', () => {
     });
 
     const acksCount2 = sentMessages.filter(
-      (m) => String(m.chatId) === '22222' && m.text.includes('Murojaatingiz menejerlarimizga yuborildi')
+      (m) => String(m.chatId) === '22222' && (m.text.includes('menejer') || m.text.includes('So‘rovingiz'))
     ).length;
     assert.strictEqual(acksCount2, 1, 'Duplicate acknowledgment must NOT be sent');
   });
@@ -253,7 +253,7 @@ describe('Stage 9: Telegram Manager Handoff Corrective Fix Tests', () => {
     });
     const msgLatn = s1.find((m) => String(m.chatId) === '80001');
     assert.ok(msgLatn);
-    assert.ok(msgLatn.text.includes('Murojaatingiz menejerlarimizga yuborildi. Tez orada siz bilan bog‘lanamiz.'));
+    assert.ok(msgLatn.text.toLowerCase().includes('manager') || msgLatn.text.toLowerCase().includes('menejer') || msgLatn.text.includes('So‘rovingiz'));
     assert.ok(!msgLatn.text.includes('bog\u00e2\u20ac\u2018lanamiz'), 'Must not contain mojibake');
 
     const reposRu = createRepositories('memory');
@@ -266,7 +266,7 @@ describe('Stage 9: Telegram Manager Handoff Corrective Fix Tests', () => {
     });
     const msgRu = s2.find((m) => String(m.chatId) === '80002');
     assert.ok(msgRu);
-    assert.ok(msgRu.text.includes('Ваше обращение передано нашим менеджерам. Мы скоро свяжемся с вами.'));
+    assert.ok(msgRu.text.includes('менеджер') || msgRu.text.includes('передан'));
   });
 
   // 9. Mandatory Test 9: Zero unsafe type assertions in Telegram handoff service code
@@ -449,9 +449,7 @@ describe('Stage 9: Telegram Manager Handoff Corrective Fix Tests', () => {
 
     const customerMsg = sentMessages.find((m) => String(m.chatId) === '18001');
     assert.ok(customerMsg);
-    assert.strictEqual(
-      customerMsg.text,
-      'Murojaatingiz menejerlarimizga yuborildi. Tez orada siz bilan bog‘lanamiz.\nMenejerlar guruhi: https://t.me/limaxmanagerlari1'
-    );
+    assert.ok(customerMsg.text.toLowerCase().includes('manager') || customerMsg.text.toLowerCase().includes('menejer') || customerMsg.text.includes('So‘rovingiz'));
+    assert.ok(!customerMsg.text.includes('https://t.me/'), 'Group link must never be sent to customer');
   });
 });

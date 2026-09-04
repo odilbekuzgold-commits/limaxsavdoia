@@ -205,9 +205,9 @@ describe('Stage 3.1: Repository Pattern Unit Tests', () => {
 
     await runMigrations(mockPool);
 
-    assert.strictEqual(insertedMigrations.length, 14);
+    assert.strictEqual(insertedMigrations.length, 15);
     assert.strictEqual(insertedMigrations[0], '001_pgvector_extension');
-    assert.strictEqual(insertedMigrations[13], '014_google_sheets_business_sync');
+    assert.strictEqual(insertedMigrations[14], '015_make_moq_nullable');
   });
 
   test('7. Mounted API Routers (Inventory, Pricing, Certificates, Media, Settings) factory verification', () => {

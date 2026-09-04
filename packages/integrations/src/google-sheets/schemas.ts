@@ -2,7 +2,19 @@ import { z } from 'zod';
 
 export const REQUIRED_SPREADSHEET_ID = '1a8ouEPIArKhHzrLlmGGlpiD1wKYqOFKHzMoY9JkllBI';
 
-export const VALID_SHEET_TABS = ['Products', 'Prices', 'Inventory', 'Sync_Control'] as const;
+export function getSpreadsheetId(): string {
+  return process.env.GOOGLE_SHEETS_SPREADSHEET_ID || REQUIRED_SPREADSHEET_ID;
+}
+
+export const VALID_SHEET_TABS = [
+  'Products',
+  'Prices',
+  'Inventory',
+  'Sync_Control',
+  'QA_HUMAN_MANAGER',
+  'BUSINESS_RULES_CODEX',
+  'CODEX_RUNTIME_MAP',
+] as const;
 
 // Helper: parse string booleans
 export const parseBoolean = (val: unknown): boolean => {
@@ -71,7 +83,7 @@ export const SheetPriceRowSchema = z.object({
   amount: z.preprocess(parseNumeric, z.number().gt(0, 'Price amount must be > 0')),
   currency: z.string().min(1).default('USD'),
   unit: z.string().min(1).default('kg'),
-  minOrderQuantity: z.preprocess(parseNumeric, z.number().gte(0).default(1)),
+  minOrderQuantity: z.preprocess(parseNullableNumeric, z.number().gte(0).nullable().optional()),
   approvalStatus: z.string().transform((s) => s.trim().toUpperCase()),
   syncEnabled: z.preprocess(parseBoolean, z.boolean()),
   notes: z.string().optional(),

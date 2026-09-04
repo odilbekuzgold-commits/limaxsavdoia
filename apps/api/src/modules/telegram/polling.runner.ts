@@ -93,13 +93,15 @@ export class TelegramPollingRunner {
 
         for (const update of updates) {
           try {
-            await processTelegramUpdate({
+            logger.info({ updateId: update.update_id }, '[Telegram Polling] Processing incoming update');
+            const res = await processTelegramUpdate({
               update,
               repos: this.repos,
               client: this.client,
               allowRegularMessages: this.allowRegularMessages,
               managerChatId: this.managerChatId,
             });
+            logger.info({ updateId: update.update_id, result: res }, '[Telegram Polling] Update processed result');
           } catch (err) {
             logger.error({ err, updateId: update.update_id }, '[Telegram Polling] Error processing update');
           }

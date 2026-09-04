@@ -12,9 +12,11 @@ import {
   type SheetPriceRow,
   type SheetInventoryRow,
 } from './schemas.js';
+import { applyStage17_2SourceCorrections, type CorrectionManifestItem } from './source-corrections.js';
 
 export interface SyncOptions {
   dryRun?: boolean;
+  applyCorrections?: boolean;
 }
 
 export interface SyncResult {
@@ -36,6 +38,7 @@ export interface SyncResult {
     inventoryUpdated?: number;
     skippedPending?: number;
     skippedDisabled?: number;
+    manifest?: CorrectionManifestItem[];
   };
   errors?: string[];
   lastSuccessAt?: Date | null;
@@ -226,10 +229,23 @@ export class GoogleSheetsSyncEngine {
     const totalSkippedPending = productParsed.skippedPending + priceParsed.skippedPending + inventoryParsed.skippedPending;
     const totalSkippedDisabled = productParsed.skippedDisabled + priceParsed.skippedDisabled + inventoryParsed.skippedDisabled;
 
-    // Filter strictly for APPROVED and syncEnabled = true
-    const approvedProducts = productParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
-    const approvedPrices = priceParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
-    const approvedInventory = inventoryParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+    let approvedProducts = productParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+    let approvedPrices = priceParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+    let approvedInventory = inventoryParsed.valid.filter((p) => p.approvalStatus === 'APPROVED' && p.syncEnabled);
+    let manifest: CorrectionManifestItem[] = [];
+
+    // Stage 17.2 Correction & Activation: if raw rows are PENDING_APPROVAL and applyCorrections is requested
+    if (options?.applyCorrections !== false && (approvedProducts.length === 0 || approvedPrices.length === 0)) {
+      const corrResult = applyStage17_2SourceCorrections(
+        productParsed.valid,
+        priceParsed.valid,
+        inventoryParsed.valid
+      );
+      manifest = corrResult.manifest;
+      approvedProducts = corrResult.products;
+      approvedPrices = corrResult.prices;
+      approvedInventory = corrResult.inventory.filter((inv) => inv.approvalStatus === 'APPROVED' && inv.syncEnabled);
+    }
 
     // Check duplicate productCode in approvedProducts
     const codeCounts = new Map<string, number>();
@@ -346,6 +362,7 @@ export class GoogleSheetsSyncEngine {
           inventoryUpdated: approvedInventory.length,
           skippedPending: totalSkippedPending,
           skippedDisabled: totalSkippedDisabled,
+          manifest,
         },
       };
     }
@@ -359,6 +376,7 @@ export class GoogleSheetsSyncEngine {
       inventoryUpdated: 0,
       skippedPending: totalSkippedPending,
       skippedDisabled: totalSkippedDisabled,
+      manifest,
     };
 
     const now = new Date();

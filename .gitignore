@@ -52,3 +52,5 @@ scratch/
 # Playwright E2E artifacts (never commit)
 playwright-report/
 test-results/
+scratch_debug_query.mjs
+word/

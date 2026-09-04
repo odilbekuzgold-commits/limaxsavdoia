@@ -1,4 +1,4 @@
-import type { SupportedLanguage } from '@limax/shared';
+import { MASTER_RESPONSES_UZ } from '../templates/master-responses.js';
 
 export type TemplateKey =
   | 'unknownPrice'
@@ -29,106 +29,68 @@ export interface LocalizedTemplates {
 
 export const TEMPLATES: Record<'uz-Latn' | 'uz-Cyrl' | 'ru', LocalizedTemplates> = {
   'uz-Latn': {
-    unknownPrice: (productName) =>
-      productName
-        ? `Kechirasiz, ${productName} boʻyicha amaldagi narx tasdiqlanmagan. Qancha miqdor kerak edi?`
-        : 'Kechirasiz, ushbu mahsulot boʻyicha amaldagi narx tasdiqlanmagan. Qancha miqdor kerak edi?',
+    unknownPrice: (productName) => MASTER_RESPONSES_UZ.unknownPrice(productName),
     unknownStock: (productName) =>
-      productName
-        ? `Kechirasiz, ${productName} hozirda omborda mavjud emas yoki holati nomaʼlum. Qancha miqdor kerak edi?`
-        : 'Kechirasiz, amaldagi qoldiq tasdiqlanmagan. Qancha miqdor kerak edi?',
-    askProductOrCode: () =>
-      'Iltimos, qaysi mahsulot yoki ip kodi (masalan, 30/70 oq) boʻyicha narx kerakligini koʻrsating.',
+      productName ? MASTER_RESPONSES_UZ.stockGeneralAvailable(productName) : 'Ha, mahsulot omborda mavjud.',
+    askProductOrCode: () => MASTER_RESPONSES_UZ.unspecifiedProductClarify,
     askQuantity: (productName) =>
-      productName
-        ? `${productName} boʻyicha qancha miqdor (masalan, necha kg yoki tonna) kerak edi?`
-        : 'Sizga qancha miqdor kerak edi?',
-    complaintApology: () =>
-      'Kechirasiz, mahsulot sifati boʻyicha muammo yuzaga kelganidan afsusdamiz.',
+      productName ? `${productName} bo‘yicha qancha kerak bo’ladi?` : 'Qancha kerak bo’ladi?',
+    complaintApology: () => MASTER_RESPONSES_UZ.complaint,
     requestEvidence: () =>
-      'Iltimos, muammoli mahsulotning rasm yoki videosini yuboring. Menejerimiz tez orada koʻrib chiqadi.',
-    sampleUnverified: () =>
-      'Kechirasiz, namunalar va kataloglar mavjudligi menejerimiz tomonidan tasdiqlanadi. Tez orada bogʻlanamiz.',
-    managerHandoff: () =>
-      'Murojaatingiz menejerlarimizga yuborildi. Tez orada siz bilan bog‘lanamiz.\nMenejerlar guruhi: https://t.me/limaxmanagerlari1',
-    securityBlocked: () =>
-      'Kechirasiz, ushbu savol boʻyicha javob bera olmayman. Menejerimiz tez orada bogʻlanadi.',
-    identityResponse: () =>
-      'Men LImax AI yordamchisiman. Sizga B2B mahsulotlarimiz va zakazlar boʻyicha yordam beraman.',
-    actionNeutralFallback: () =>
-      'Maʼlumot menejerimiz tomonidan aniqlashtirilmoqda va tez orada taqdim etiladi.',
+      'Iltimos, muammoli mahsulotning partiya raqami, rasm yoki videosini yuboring. Menejerimiz ko‘rib chiqadi.',
+    sampleUnverified: () => MASTER_RESPONSES_UZ.catalogHandoff,
+    managerHandoff: () => MASTER_RESPONSES_UZ.managerHandoff,
+    securityBlocked: () => MASTER_RESPONSES_UZ.securityBlocked,
+    identityResponse: () => MASTER_RESPONSES_UZ.identity,
+    actionNeutralFallback: () => 'Hozir aniqlashtirib beraman!',
   },
   'uz-Cyrl': {
-    unknownPrice: (productName) =>
-      productName
-        ? `Кечирасиз, ${productName} бўйича амалдаги нарх тасдиқланмаган. Қанча миқдор керак эди?`
-        : 'Кечирасиз, ушбу маҳсулот бўйича амалдаги нарх тасдиқланмаган. Қанча миқдор керак эди?',
+    unknownPrice: (_productName) => 'Ҳозир аниқлаштириб бераман!',
     unknownStock: (productName) =>
-      productName
-        ? `Кечирасиз, ${productName} ҳозирда омборда мавжуд эмас ёки ҳолати номаълум. Қанча миқдор керак эди?`
-        : 'Кечирасиз, амалдаги қолдиқ тасдиқланмаган. Қанча миқдор керак эди?',
-    askProductOrCode: () =>
-      'Илтимос, қайси маҳсулот ёки ип коди (масалан, 30/70 оқ) бўйича нарх кераклигини кўрсатинг.',
+      productName ? `Ҳа, ${productName} бор.` : 'Ҳа, маҳсулот омборда бор.',
+    askProductOrCode: () => 'Ҳозир аниқлаштириб бераман!',
     askQuantity: (productName) =>
-      productName
-        ? `${productName} бўйича қанча миқдор (масалан, неча кг ёки тонна) керак эди?`
-        : 'Сизга қанча миқдор керак эди?',
+      productName ? `${productName} бўйича қанча керак бўлади?` : 'Қанча керак бўлади?',
     complaintApology: () =>
-      'Кечирасиз, маҳсулот сифати бўйича муаммо юзага келганидан афсусдамиз.',
+      'Кечирасиз, маҳсулот сифати бўйича муаммо юзага келганидан афсусдамиз. Илтимос, муаммоли маҳсулотнинг расм ёки видеосини юборинг. Бош сифат назоратчимиз ва менежеримиз кўриб чиқади.',
     requestEvidence: () =>
-      'Илтимос, муаммоли маҳсулотнинг расм ёки видеосини юборинг. Менежеримиз тез орада кўриб чиқади.',
-    sampleUnverified: () =>
-      'Кечирасиз, намуналар ва каталоглар мавжудлиги менежеримиз томонидан тасдиқланади. Тез орада боғланамиз.',
-    managerHandoff: () =>
-      'Мурожаатингиз менежерларимизга юборилди. Тез орада сиз билан боғланамиз.\nМенежерлар гуруҳи: https://t.me/limaxmanagerlari1',
-    securityBlocked: () =>
-      'Кечирасиз, ушбу савол бўйича жавоб бера олмайман. Менежеримиз тез орада боғланади.',
-    identityResponse: () =>
-      'Мен LImax AI ёрдамчисиман. Сизга B2B маҳсулотларимиз ва заказлар бўйича ёрдам бераман.',
-    actionNeutralFallback: () =>
-      'Маълумот менежеримиз томонидан аниқлаштирилмоқда ва тез орада тақдим этилади.',
+      'Илтимос, муаммоли маҳсулотнинг расм ёки видеосини юборинг.',
+    sampleUnverified: () => 'Ҳа ҳозир юбораман!',
+    managerHandoff: () => 'Ҳоп бўлади. Менежерга айтаман сизга ёзади.',
+    securityBlocked: () => 'Узур, бу масала бўйича маълумот беролмайман.',
+    identityResponse: () => 'Нега бундай деяпсиз?',
+    actionNeutralFallback: () => 'Ҳозир аниқлаштириб бераман!',
   },
   ru: {
-    unknownPrice: (productName) =>
-      productName
-        ? `К сожалению, актуальная цена на ${productName} пока не подтверждена. Какое количество вам нужно?`
-        : 'К сожалению, актуальная цена на данный товар не подтверждена. Какое количество вам нужно?',
+    unknownPrice: (_productName) => 'Сейчас уточню информацию!',
     unknownStock: (productName) =>
-      productName
-        ? `К сожалению, ${productName} сейчас отсутствует на складе или статус неизвестен. Какое количество вам нужно?`
-        : 'К сожалению, актуальный остаток не подтверждён. Какое количество вам нужно?',
-    askProductOrCode: () =>
-      'Пожалуйста, укажите код товара или название (например, 30/70 белый), чтобы узнать цену.',
+      productName ? `Да, ${productName} есть в наличии.` : 'Да, товар в наличии на складе.',
+    askProductOrCode: () => 'Сейчас уточню информацию!',
     askQuantity: (productName) =>
-      productName
-        ? `Какое количество ${productName} вам необходимо (в кг или тоннах)?`
-        : 'Какое количество вам необходимо?',
+      productName ? `Какое количество ${productName} вам необходимо?` : 'Какое количество вам необходимо?',
     complaintApology: () =>
-      'Приносим извинения за возникшие неудобства с качеством продукции.',
+      'Приносим извинения за неудобства. Пожалуйста, отправьте фото или видео дефекта. Наш менеджер свяжется с вами.',
     requestEvidence: () =>
-      'Пожалуйста, отправьте фото или видео продукции. Наш менеджер свяжется с вами в ближайшее время.',
-    sampleUnverified: () =>
-      'К сожалению, наличие образцов и каталогов подтверждается менеджером. Мы скоро свяжемся с вами.',
-    managerHandoff: () =>
-      'Ваше обращение передано нашим менеджерам. Мы скоро свяжемся с вами.\nГруппа менеджеров: https://t.me/limaxmanagerlari1',
-    securityBlocked: () =>
-      'К сожалению, я не могу ответить на этот вопрос. Наш менеджер скоро свяжется с вами.',
-    identityResponse: () =>
-      'Я AI-ассистент LImax. Помогаю по B2B продукции и заказам пряжи.',
-    actionNeutralFallback: () =>
-      'Информация уточняется нашим менеджером и будет предоставлена в ближайшее время.',
+      'Пожалуйста, отправьте фото или видео дефекта.',
+    sampleUnverified: () => 'Да, сейчас отправлю!',
+    managerHandoff: () => 'Хорошо. Я передам менеджеру, он напишет вам.',
+    securityBlocked: () => 'Извините, по данному вопросу не могу предоставить информацию.',
+    identityResponse: () => 'Почему вы так говорите?',
+    actionNeutralFallback: () => 'Сейчас уточню информацию!',
   },
 };
 
-export function getLocalizedTemplate(
-  lang: SupportedLanguage | string
-): LocalizedTemplates {
-  if (lang === 'uz-Cyrl') {
-    return TEMPLATES['uz-Cyrl'];
-  }
-  if (lang === 'ru') {
-    return TEMPLATES['ru'];
-  }
-  // Default to uz-Latn for uz, uz-Latn or unknown
+export function getTemplates(lang?: string): LocalizedTemplates {
+  if (lang === 'ru') return TEMPLATES['ru'];
+  if (lang === 'uz-Cyrl') return TEMPLATES['uz-Cyrl'];
   return TEMPLATES['uz-Latn'];
+}
+
+export function getLocalizedTemplate(lang: string, key: TemplateKey, arg?: string): string {
+  const t = getTemplates(lang);
+  const fn = t[key] as any;
+  if (typeof fn === 'function') {
+    return fn(arg);
+  }
+  return '';
 }
